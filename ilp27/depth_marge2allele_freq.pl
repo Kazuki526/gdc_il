@@ -13,6 +13,7 @@ my @ls=`ls $bp/depth/`;
 my %af=();
 foreach my $file(@ls){
 		chomp $file;
+		if($file eq "all_coverage.tsv"){next;}
 		print "input $file\n";
 		open(IN,"$bp/depth/$file");
 		<IN>;  #delete colum line
@@ -30,8 +31,8 @@ foreach my $file(@ls){
 
 open(OUT,">$bp/depth/all_coverage.tsv");
 print OUT "Chromosome\tPosition\tcoverage\n";
-foreach my $chr (sort{$a<=>$b}%af){
-		foreach my $posi(sort{$a<=>$b}%{$af{$chr}}){
+foreach my $chr (sort{$a<=>$b} keys %af){
+		foreach my $posi(sort{$a<=>$b} keys %{$af{$chr}}){
 				print OUT "$chr\t$posi\t$af{$chr}{$posi}\n";
 		}
 }
