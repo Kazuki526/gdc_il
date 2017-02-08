@@ -3,8 +3,9 @@ use strict;
 use warnings;
 
 #perl bamslicing.pl MANIFEST.tsv out_DIR maxparallel
-
-my $token=`cat gdc-user-token.txt`;
+my@ls=`ls ~/git/gdc_il/`;
+my @token=grep{/^gdc-user-token/}@ls;
+my $token=`cat $token[0]`;
 open(MAN,"$ARGV[0]");
 #my($start_line_num,$end_line_num)=($ARGV[2],$ARGV[3]);
 my$line_num=0;
