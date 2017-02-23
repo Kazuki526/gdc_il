@@ -26,18 +26,18 @@ while(<MANI>){
 		my $taila=`samtools view $bp/$line[1] |tail -n 1`;
 		if(!defined $taila){$taila="0\t0\t0";}
 		my @taila=split(/\t/,$taila);
-		if(($taila[2] ne "chrX")&&($taila[2] ne "chrY")){
-				print "$linen:$line[1] chr $taila[2] eq not chrXorY so download again\n";
+		if(($taila[2] ne "chrX")||($taila[3] < 134428791 )){
+				print "$linen:$line[1]  $taila[2]:$tailb[3] eq not chrXorY so download again\n";
 				my $focal=0;
 				while($focal==0){
 						system("curl --header \"X-Auth-Token: $token\" --request POST https://gdc-api.nci.nih.gov/slicing/view/$line[0] --header \"Content-Type: application/json\" -d\@top_driverallexon_json.txt --output $bp/$line[1] > /dev/null 2>&1");
 						my $tailb=`samtools view $bp/$line[1] |tail -n 1`;
 						my @tailb=split(/\t/,$tailb);
 						if(!defined $tailb){$taila="0\t0\t0";}
-						if(($tailb[2] ne "chrX")&&($tailb[2] ne "chrY")&&($taila ne $tailb)){$taila=$tailb;
+						if(($tailb[2] ne "chrX")&&($tailb[3] > 134428791 )&&($taila ne $tailb)){$taila=$tailb;
 						}else{
 								$focal++;
-								print "$linen:$line[1] redownloaded $tailb[2] is ok\n";
+								print "$linen:$line[1] redownloaded $tailb[2]:$tailb[3] is ok\n";
 								}
 				}
 		}
