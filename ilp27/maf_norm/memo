@@ -1,0 +1,17 @@
+以下のスクリプトはすべて/Volumes/cancer/kaz_gdc　で実行する
+まず
+body_part(dir)以下にgdc_manifestをおく
+そして
+perl ~/get/gdc_il/ilp27/maf_norm/bamslicing.pl body_part
+
+maf 作成（redownload次第だがmaf作成は２日ほどで終わる）
+perl ~/get/gdc_il/ilp27/maf_norm/bam2maf.pl body_part 2>&1|tee body_part/out_bam2maf.log
+
+depth 情報取得(約半日）
+perl ~/get/gdc_il/ilp27/maf_norm/depth_by_bam.pl body_part
+それを一つのファイルにまとめる
+perl ~/get/gdc_il/ilp27/maf_norm/depth_marge2allele_freq.pl
+
+
+mafにgenotype情報追加
+perl ~/get/gdc_il/ilp27/maf_norm/push_genotype_maf.pl body_part
