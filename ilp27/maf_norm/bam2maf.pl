@@ -18,7 +18,7 @@ $|=1;
 my $json=`ls $bp|grep 'bam_json.txt'`;chomp $json;
 my $json_path="$bp/$json";
 print "download response $json_path file\n";
-system("curl --request POST --header \"Content-Type: application/json\" --data \@$json_path 'https://gdc-api.nci.nih.gov/files' >$bp/response.tsv");
+system("curl --request POST --header \"Content-Type: application/json\" --data \@$json_path 'https://gdc-api.nci.nih.gov/files'|nkf -Lu >$bp/response.tsv");
 
 print "reading response file\n";
 open(RES,"$bp/response.tsv") or die "!!!ERRORRRRR!!!  $bp/response.tsv isnot exist!!\n";
