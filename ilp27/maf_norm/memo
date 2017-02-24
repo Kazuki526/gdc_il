@@ -9,8 +9,6 @@ perl ~/get/gdc_il/ilp27/maf_norm/bam2maf.pl body_part 2>&1|tee body_part/out_bam
 
 depth 情報取得(約半日）
 perl ~/get/gdc_il/ilp27/maf_norm/depth_by_bam.pl body_part
-それを一つのファイルにまとめる
-perl ~/get/gdc_il/ilp27/maf_norm/depth_marge2allele_freq.pl
 
 
 mafにgenotype情報追加
