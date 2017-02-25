@@ -73,7 +73,7 @@ foreach my $pid(keys %response){
 				close OUT;
 				`samtools depth -q 13 -b top_driver105.bed @bam >>$bp/depth/$outfile`;
 				@bam=();
-
+				@pid=();
 		}
 		
 }
