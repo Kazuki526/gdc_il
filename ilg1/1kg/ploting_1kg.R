@@ -1,4 +1,4 @@
-#this script is /working/ploting_1kg.R
+#this script is ~/git/gdc_il/1kg/ploting_1kg.R
 library(tidyr)
 library(plyr)
 library(dplyr)

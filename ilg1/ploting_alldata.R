@@ -12,7 +12,7 @@ library(XML)
 library(gtools)
 library(purrr)
 
-setwd('/Volumes/areca42TB/tcga/CNA/brca/cel/')
+setwd('/Volumes/areca42TB/tcga/CNA/breast/cel/')
 write_df_watal = function(x, path, delim='\t', na='NA', append=FALSE, col_names=!append, ...) {
   file = if (grepl('gz$', path)) {
     gzfile(path, ...)
@@ -67,7 +67,7 @@ driver_genes=read_tsv("~/git/driver_genes/driver_genes.tsv")%>>%
 cna=read_tsv('annotate_ascat.tsv.gz') 
 ascat_focal=read_tsv('error_of_annotate_ascat.txt') %>>%
   mutate(focal_ascat="no")
-maf_focal=read_tsv('../../../maf_norm/brca/list_of_perfect_maf.tsv') %>>%
+maf_focal=read_tsv('../../../maf_norm/breast/list_of_perfect_maf.tsv') %>>%
   left_join(ascat_focal) %>>%
   mutate(focal=ifelse(is.na(focal_ascat),focal,"no")) %>>%dplyr::select(-focal_ascat)
 cna = cna %>>%
@@ -94,7 +94,7 @@ write_df_watal(plot_posi,"~/ascat/data/plot_posi.tsv")
 plot=function(.cna){
   patient=.cna$patient_id
   chrgroupe=.cna$groupe
-  norm_maf1=read_tsv(paste('../../../maf_norm/brca/',patient,'.maf',sep=""),comment = "#") %>>%
+  norm_maf1=read_tsv(paste('../../../maf_norm/breast/',patient,'.maf',sep=""),comment = "#") %>>%
     dplyr::rename(gene_symbol=Hugo_Symbol,chr=Chromosome,start=Start_Position,end=End_Position) %>>%
     dplyr::select(gene_symbol,chr,start,end,Consequence) %>>%
     classify_consequence() %>>%
@@ -179,7 +179,7 @@ ggsave("test.pdf",gridExtra::marrangeGrob(pa$plot,nrow = 10,ncol = 1,top = NULL)
 if(1){
   chrgroupe="chr1:3"
   patient="TCGA-3C-AAAU"
-  norm_maf1=read_tsv(paste('../../../maf_norm/brca/',patient,'.maf',sep=""),comment = "#") %>>%
+  norm_maf1=read_tsv(paste('../../../maf_norm/breast/',patient,'.maf',sep=""),comment = "#") %>>%
     dplyr::rename(gene_symbol=Hugo_Symbol,chr=Chromosome,start=Start_Position,end=End_Position) %>>%
     dplyr::select(gene_symbol,chr,start,end,Consequence) %>>%
     classify_consequence() %>>%
@@ -293,7 +293,7 @@ strip_maf = function(infile) {
 }
 
 norm_mafs = maf_focal_bygene%>>%
-  mutate(filename=paste('../../../maf_norm/brca/',patient_id,'.maf',sep="")) %>>%
+  mutate(filename=paste('../../../maf_norm/breast/',patient_id,'.maf',sep="")) %>>%
   mutate(purrr::map(filename,~strip_maf(.))) %>>%
   unnest() %>>%
   dplyr::rename(gene_symbol=Hugo_Symbol,chr=Chromosome,start=Start_Position) %>>%
