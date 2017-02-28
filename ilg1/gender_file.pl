@@ -10,7 +10,6 @@ my $dpdir="$pwd/maf_norm/$bp/depth";
 
 #make body_part sex_json
 
-my @list_perf=`ls $pwd/CNA/$bp/cel/ascat/`;chomp @list_perf;
 my ($json,$jsonbp,$response_sexfile,$response_cel,$file_sex,$list_normbam_perfect,$ascat_error)=
 	("$pwd/maf_norm/sex_json.txt",
 	"$dpdir/$bp"."_sex_json.txt",
@@ -30,7 +29,9 @@ if(! -f $file_sex){die "ERROR:$file_sex is not exist\n";}
 if(! -f $list_normbam_perfect){die "ERROR:$list_normbam_perfect file is not exist\n";}
 if(! -f $ascat_error){die "ERROR:$ascat_error file is not exist\n";}
 
-#mix ascat(CNA) & norm_maf patient both ok
+#list up having ascat CNA data
+my @list_perf=`ls $pwd/CNA/$bp/cel/ascat/`;chomp @list_perf;
+#mix ascat(CNA) & norm_maf patient both ok, so now remove ascat error
 open(ER,"$ascat_error");
 my $devnull=<ER>;
 while(<ER>){
@@ -40,6 +41,7 @@ while(<ER>){
 }
 close ER;
 
+#filter maf_norm too ok
 open(LP,"$list_normbam_perfect");
 my %lnp=();
 $devnull=<LP>;
@@ -50,7 +52,7 @@ while(<LP>){
 }
 close LP;
 @list_perf=grep{defined$lnp{$_}} @list_perf;
-my %list_perf=map{$_=>"ok"}@list_perf;
+my %list_perf=map{$_=>"ok"}@list_perf; #@list_perf having patient_id is both ascat CNA and maf_norm ok
 
 #nkf command installed
 my $nkfpath=`which nkf`;chomp $nkfpath;
