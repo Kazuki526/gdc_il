@@ -51,7 +51,7 @@ foreach my $pid ( keys %response ){
 				for(my $i=0;@file > $i;$i++){
 						$file[$i]="$bamdir/$file[$i]";
 				}
-				system("samtools merge $bamdir/$pid.bam @file");
+				system("samtools merge -f $bamdir/$pid.bam @file");
 				system("samtools index $bamdir/$pid.bam");
 				$response{$pid}="$pid.bam";
 		}else{

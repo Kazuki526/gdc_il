@@ -17,3 +17,5 @@ perl ~/get/gdc_il/ilp27/maf_norm/push_genotype_maf.pl body_part
 
 その後　ilg1の /Volumes/areca42TB/tcga/maf_norm/$bp以下に各mafi/を
 /Volumes/areca42TB/tcga/maf_norm/$bp/depth以下に list_of_perfect_maf.tsv depth/　を送る
+
+そして　ilgにて ilg1/gender_file.plを実行して準備完了
