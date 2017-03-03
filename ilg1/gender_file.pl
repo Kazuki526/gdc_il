@@ -57,7 +57,7 @@ my %list_perf=map{$_=>"ok"}@list_perf; #@list_perf having patient_id is both asc
 #nkf command installed
 my $nkfpath=`which nkf`;chomp $nkfpath;
 #curl gender response
-if($nkfpath and -e $nkfpath){die "ERROR:nkf was not installed. please do\nbrew install nkf\n";}
+($nkfpath and -e $nkfpath) or die "ERROR:nkf was not installed. please do\nbrew install nkf\n";
 system("curl --request POST --header \"Content-Type: application/json\" --data \@$jsonbp 'https://gdc-api.nci.nih.gov/cases'|nkf -Lu >$response_sexfile");
 
 #read file_sex(of CNA) and make hash (%cel)
