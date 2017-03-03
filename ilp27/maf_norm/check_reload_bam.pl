@@ -33,7 +33,7 @@ while(<MANI>){
 		my @line=split(/\t/,);
 		print "$linen:$line[1] doing\n";
 		my $taila=`samtools view $bamdir/$line[1] |tail -n 1`;
-		if(!$taila){$taila="0\t0\t0";}
+		if(!$taila){$taila="0\t0\t0\t0";}
 		my @taila=split(/\t/,$taila);
 		if(($taila[2] ne "chrX")||($taila[3] < 134428791 )){
 				print "$linen:$line[1] chr $taila[2]:$taila[3] eq not chrX:134428791~ so download again\n";

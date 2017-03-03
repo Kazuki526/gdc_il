@@ -8,7 +8,7 @@ fi
 export PERL5LIB=/usr/local/lib/perl5/site_perl:${PERL5LIB} #vcftools neeed this 
 
 bam=$1/$1_norm_cancergenes_bam/$2
-samtools mpileup -uf /Volumes/cancer/GRCh38.d1.vd1.fa -l ~/git/gdc_il/ilp27/maf_norm/top_driver105.bed $bam|bcftools call -O v -v -c|vcf-annotate -f +/d=5/|grep -e 'PASS' -e '^#'|sed s/chr// >$1/samtools/$3.vcf
+samtools mpileup -uf /Volumes/cancer/GRCh38.d1.vd1.fa -l ~/git/gdc_il/ilp27/maf_norm/top_driver105.bed $bam|bcftools call -O v -v -c|vcf-annotate -f +/d=10/|grep -e 'PASS' -e '^#'|sed s/chr// >$1/samtools/$3.vcf
 
 
 export VEP_PATH=$HOME/vep
