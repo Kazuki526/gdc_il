@@ -26,6 +26,8 @@ use Parallel::ForkManager;
 my $max_processes=10;
 my $pm = new Parallel::ForkManager($max_processes);
 my $dev_null=<MAN>;
+my $json=$ENV{"HOME"}."/git/gdc_il/ilp27/maf_norm/top_driverallexon_json.txt";
+($json and -e $json) or die "ERROR:$json is not exist!^n";
 
 while(<MAN>){
 		$line_num++;
@@ -38,7 +40,6 @@ while(<MAN>){
 		chomp;
 		my @line=split(/\t/,);
 		print "$line_num:curl $line[1] now\n";
-		my $json="~/git/gdc_il/ilp27/maf_norm/top_driverallexon_json.txt";
 		system("curl --header \"X-Auth-Token: $token\" --request POST https://gdc-api.nci.nih.gov/slicing/view/$line[0] --header \"Content-Type: application/json\" -d\@$json --output $bamdir/$line[1] > /dev/null 2>&1");
 
 		$pm->finish; #terminates the child process
