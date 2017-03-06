@@ -3,6 +3,7 @@ use warnings;
 use strict;
 use List::Util qw(sum);
 
+
 my $exac_path=$ENV{"HOME"}."/.vep/ExAC_nonTCGA.r0.3.1.sites.vep.vcf.gz";
 (-e $exac_path) or die "ERROR:$exac_path is not exist!\n";
 my $driver_genes_path="/Volumes/cancer/kaz_gdc/driver_genes.tsv";
@@ -57,7 +58,8 @@ while(<VCF>){
 				if($focal>0){
 						if((length($line[3])>1)||(length($line[4]) >1)){next;}
 						print OUTV join("\t",@line[0..6])."\t$ac\t$an\n";
-						print OUTB "chr$line[0]\t$line[1]\t$line[1]\t$line[0]:$line[1]\n";
+						my $end=$line[1]+1;
+						print OUTB "chr$line[0]\t$line[1]\t$end\t$line[0]:$line[1]\n";
 				}
 		}
 }
@@ -68,14 +70,15 @@ close VCF;
 open (OUT,"|gzip -c >/Volumes/cancer/exac/exac_nontcga_liftovered.vcf.gz");
 foreach my $chr (@chr){
 		print "liftover $chr\n";
-		my %remap = map{chomp;my @c=split("\t");$c[0]=~s/^chr//;($c[3],"$c[0]:$c[2]")}`~/vep/samtools/bin/liftOver /Volumes/cancer/exac/before_liftover_bed/$chr.bed ~/.vep/hg19ToHg38.over.chain /dev/stdout /dev/null 2>/dev/null`;
+		my %remap = map{chomp;my @c=split("\t");$c[0]=~s/^chr//;($c[3],"$c[0]:$c[1]")}`~/vep/samtools/bin/liftOver /Volumes/cancer/exac/before_liftover_bed/$chr.bed ~/.vep/hg19ToHg38.over.chain /dev/stdout /dev/null 2>/dev/null`;
 		print "printing out $chr \n";
 		open (IN,"gunzip -c /Volumes/cancer/exac/before_liftover/$chr.vcf.gz|");
 		while(<IN>){
 				if($_=~/^#/){
-						if($chr == 1){print OUT "$_";}
+						if($chr eq "1"){print OUT "$_";}
 						next;
 				}else{
+						chomp;
 						my @line=split(/\t/,);
 						my ($chr,$pos,$refseq);
 						if($remap{"$line[0]:$line[1]"} and $remap{"$line[0]:$line[1]"}=~ /^([^:]+):(\d+)$/){
@@ -107,6 +110,7 @@ foreach my $chr (@chr){
 										my $refseq_ac = $line[8] - sum(@ac);
 										print OUT "$chr\t$pos\t$line[2]\t$refseq\t$line[3]\t$line[5]\t$line[6]\tAC=$refseq_ac;AN=$line[8]\n";
 								}else{
+										if($line[4] ne $refseq){die "liftover correct?at $_\nliftover:".$remap{"$line[0]:$line[1]"}."\n";}
 										my $refseq_ac = $line[8] - $line[7];
 										print OUT "$chr\t$pos\t$line[2]\t$refseq\t$line[3]\t$line[5]\t$line[6]\tAC=$refseq_ac;AN=$line[8]\n";
 								}
