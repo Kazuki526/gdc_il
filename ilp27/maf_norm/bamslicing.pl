@@ -12,7 +12,7 @@ my $bamdir="$bp/$bp"."_norm_cancergenes_bam";
 mkdir $bamdir;
 
 my $token_path=`ls ~/git/gdc_il|grep 'gdc-user-token'`;
-if($token_path=~/./){die "!!ERROR!!:token file not exitst!!";}
+if($token_path!~/./){die "!!ERROR!!:token file not exitst!!";}
 chomp $token_path;
 $token_path="~/git/gdc_il/$token_path";
 my $token=`cat $token_path`;
