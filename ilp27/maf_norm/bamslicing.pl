@@ -19,7 +19,7 @@ my $token=`cat $token_path`;
 
 my $manifest=`ls $bp|grep gdc_manifest`;chomp $manifest;
 
-open(MAN,"$manifest");
+open(MAN,"$bp/$manifest") or die "manifest file:$manifest cannot open\n";
 #my($start_line_num,$end_line_num)=($ARGV[2],$ARGV[3]);
 my$line_num=0;
 use Parallel::ForkManager;
