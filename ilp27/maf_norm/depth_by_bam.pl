@@ -71,7 +71,7 @@ foreach my $pid(keys %response){
 				open(OUT,">$bp/depth/$outfile");
 				print OUT "chr\tposition\t".join("\t",@pid)."\n";
 				close OUT;
-				`samtools depth -q 13 -b top_driver105.bed @bam >>$bp/depth/$outfile`;
+				`samtools depth -b top_driver105.bed @bam >>$bp/depth/$outfile`;
 				@bam=();
 				@pid=();
 		}
