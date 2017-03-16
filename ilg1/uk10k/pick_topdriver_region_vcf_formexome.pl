@@ -6,6 +6,11 @@ my $pwd=`pwd`;chomp $pwd;
 print "doing on $pwd\n";
 if($pwd ne "/Volumes/areca42TB/ega/file"){die "ERROR:doing on wrong directory\n";}
 
+my $liftover=$ENV{'HOME'}."/liftover/liftover";
+(-e $liftover) or die "ERROR:liftover not exist at $liftover\n";
+my $chainfile=$ENV{"HOME"}."/liftover/hg19ToHg38.over.chain";
+(-e $chainfile) or die "ERROR:chain file not exist at $chainfile\n";
+
 my $bed_file="/Volumes/areca42TB/tcga/maf_norm/top_driver105.bed";
 (-e $bed_file) or die "ERROR:topdriver bed file:$bed_file is moved?\n";
 print "reading bed file\n";
@@ -16,20 +21,58 @@ while(<BED>){
 		chomp;
 		my @line=split(/\t/,);
 		$line[0] =~ s/^chr//;
-		for(my $posi=$line[1];$line[2]>=$posi;$posi++){
-				$bed{$line[0]}{$posi}="ok";
+		if(defined $bed{$line[0]}){
+				$bed{$line[0]}.=":$line[1]-$line[2]";
+		}else{
+				$bed{$line[0]}="$line[1]-$line[2]";
 		}
 		if(!grep(@chr,$line[0])){push(@chr,"$line[0]");}
 }
 close BED;
 
 my @ls=`ls allvcf`;chomp @ls;
+#make to liftover bed
+open(VCF,"gunzip -c allvcf/$ls[0]|");
+print "writing toLiftover bed files\n";
+my $chr="";
+while(<VCF>){
+		if($_=~/^#/){next;}
+		chomp;
+		my @line=split(/\t/,);
+		if($chr ne "$line[0]"){
+				if($chr ne ""){close OUT;}
+				if(grep(@chr,$line[0])){last;}
+				$chr=$line[0];
+				open(OUT,">toLiftover/chr$chr.bed");
+		}
+		my $end=$line[0]+1;
+		#each position donot changed chromosome so not print out hg19:chr
+		print OUT "chr$line[0]\t$line[1]\t$end\t$line[1]\n";
+}
+close VCF;
+
+my %focal=();
+foreach $chr(@chr){
+		print "liftover chr$chr\n";
+		my %remap= map{chomp;my @c=split(/\t/,);$c[0]=~s/^chr//;($c[0]=>{$c[3]=>$c[1]})}`$liftover toLiftover/chr$chr.bed $chainfile /dev/stdout /dev/null 2>/dev/null`;
+		foreach my $posi(keys %{$remap{$chr}}){
+				foreach my $focal_region(split(/:/,$bed{$chr})){
+						my ($start,$end)=split(/-/,$focal_region);
+						if(($start <= $reamp{$chr}{$posi})&&($remap{$chr}{$posi} <= $end)){
+								$focal{$chr}{$posi}=$remap{$chr}{$posi};
+								last;
+						}
+				}
+		}
+}
+
+
 my $file_num=0;
 my $header="";
 my %all_vcf=();
 foreach my $file(@ls){
 		$file_num++;
-		my ($chr)=("");
+		$chr="";
 		open(VCF,"gunzip -c allvcf/$file|")or die "cant open $file\n";
 		print "read and count $file\n";
 		while(<VCF>){
@@ -45,15 +88,16 @@ foreach my $file(@ls){
 						}
 						next;
 				}
-				if(!defined $bed{$line[0]}{$line[1]}){next;}
+				if(!defined $focal{$line[0]}{$line[1]}){next;}
+				my $posi=$focal{$line[0]}{$line[1]};
 				my @alt=split(/,/,$line[4]);
 				if($file_num==1){
 						foreach my $alt (@alt){
-								$all_vcf{$line[0]}{$line[1]}{$alt}{'all'}=join("\t",@line[0..6])."\t.\t$line[8]";
-								$all_vcf{$line[0]}{$line[1]}{$alt}{'AN'}=0;
-								$all_vcf{$line[0]}{$line[1]}{$alt}{'AC'}=0;
-								$all_vcf{$line[0]}{$line[1]}{$alt}{'AA'}=0;#alt homo patient count
-								$all_vcf{$line[0]}{$line[1]}{$alt}{'RA'}=0;#hetero patient coutn
+								$all_vcf{$line[0]}{$posi}{$alt}{'all'}=join("\t",@line[0..6])."\t.\t$line[8]";
+								$all_vcf{$line[0]}{$posi}{$alt}{'AN'}=0;
+								$all_vcf{$line[0]}{$posi}{$alt}{'AC'}=0;
+								$all_vcf{$line[0]}{$posi}{$alt}{'AA'}=0;#alt homo patient count
+								$all_vcf{$line[0]}{$posi}{$alt}{'RA'}=0;#hetero patient coutn
 						}
 				}
 				for(my $t=1;@alt>=$t;$t++){
@@ -65,10 +109,10 @@ foreach my $file(@ls){
 								if($gp[0] eq "$t/$t"){$ac+=2;$aa++;}
 								elsif(($gp[0] =~ /$t\/[^$t]/)&&($gp[0] =~ /[^$t]\/$t/)){$ac++;$ra++;}
 						}
-						$all_vcf{$line[0]}{$line[1]}{$alt[$t-1]}{'AC'}+=$ac;
-						$all_vcf{$line[0]}{$line[1]}{$alt[$t-1]}{'AA'}+=$aa;
-						$all_vcf{$line[0]}{$line[1]}{$alt[$t-1]}{'RA'}+=$ra;
-						$all_vcf{$line[0]}{$line[1]}{$alt[$t-1]}{'AN'}+=$an;
+						$all_vcf{$line[0]}{$posi}{$alt[$t-1]}{'AC'}+=$ac;
+						$all_vcf{$line[0]}{$posi}{$alt[$t-1]}{'AA'}+=$aa;
+						$all_vcf{$line[0]}{$posi}{$alt[$t-1]}{'RA'}+=$ra;
+						$all_vcf{$line[0]}{$posi}{$alt[$t-1]}{'AN'}+=$an;
 				}
 		}
 }
