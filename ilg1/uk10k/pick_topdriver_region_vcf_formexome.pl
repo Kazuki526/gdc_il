@@ -32,7 +32,7 @@ close BED;
 
 my @ls=`ls allvcf`;chomp @ls;
 #make to liftover bed
-open(VCF,"gunzip -c allvcf/$ls[0]|");
+open(VCF,"gunzip -c allvcf/$ls[0]|") or die "ERROR:cant gunzip-c allvcf/$ls[0]\n";
 print "writing toLiftover bed files\n";
 my $chr="";
 while(<VCF>){
@@ -41,7 +41,7 @@ while(<VCF>){
 		my @line=split(/\t/,);
 		if($chr ne "$line[0]"){
 				if($chr ne ""){close OUT;}
-				if(grep(@chr,$line[0])){last;}
+				if(!grep(@chr,$line[0])){last;}
 				$chr=$line[0];
 				open(OUT,">toLiftover/chr$chr.bed");
 		}
@@ -58,7 +58,7 @@ foreach $chr(@chr){
 		foreach my $posi(keys %{$remap{$chr}}){
 				foreach my $focal_region(split(/:/,$bed{$chr})){
 						my ($start,$end)=split(/-/,$focal_region);
-						if(($start <= $reamp{$chr}{$posi})&&($remap{$chr}{$posi} <= $end)){
+						if(($start <= $remap{$chr}{$posi})&&($remap{$chr}{$posi} <= $end)){
 								$focal{$chr}{$posi}=$remap{$chr}{$posi};
 								last;
 						}
