@@ -33,7 +33,7 @@ close BED;
 my @ls=`ls allvcf`;chomp @ls;
 #make to liftover bed
 my $chr="";
-
+=pod
 open(VCF,"gunzip -c allvcf/$ls[0]|") or die "ERROR:cant gunzip-c allvcf/$ls[0]\n";
 print "writing toLiftover bed files\n";
 while(<VCF>){
@@ -50,6 +50,7 @@ while(<VCF>){
 		#each position donot changed chromosome so not print out hg19:chr
 		print OUT "chr$line[0]\t$line[1]\t$end\t$line[1]\n";
 }
+=cut
 
 close VCF;
 my %focal=();
@@ -76,6 +77,7 @@ foreach my $file(@ls){
 		$chr="";
 		open(VCF,"gunzip -c allvcf/$file|")or die "cant open $file\n";
 		print "read and count $file\n";
+		my $fline=0;
 		while(<VCF>){
 				if($_=~/^##/){
 						if($file_num==1){$header.="$_";}
@@ -108,7 +110,7 @@ foreach my $file(@ls){
 								if($gp[0] eq "./."){next;}
 								$an+=2;
 								if($gp[0] eq "$t/$t"){$ac+=2;$aa++;}
-								elsif(($gp[0] =~ /$t\/[^$t]/)&&($gp[0] =~ /[^$t]\/$t/)){$ac++;$ra++;}
+								elsif(($gp[0] =~ /$t\/[^$t]/)||($gp[0] =~ /[^$t]\/$t/)){$ac++;$ra++;}
 						}
 						$all_vcf{$line[0]}{$posi}{$alt[$t-1]}{'AC'}+=$ac;
 						$all_vcf{$line[0]}{$posi}{$alt[$t-1]}{'AA'}+=$aa;
@@ -119,18 +121,19 @@ foreach my $file(@ls){
 }
 close VCF;
 
-open(OUT1,"|gzip -c >all_sample_topdriver_region.vcf");
+open(OUT1,"|gzip -c >all_sample_topdriver_region.vcf.gz");
 print OUT1 "$header";
-open(OUT2,"|gzip -c >all_sample_topdriver_region_likevcf.tsv");
+open(OUT2,"|gzip -c >all_sample_topdriver_region_likevcf.tsv.gz");
 print OUT2 "chr\tstart\tref\talt\tuk_ac\tuk_an\tuk_althomo\tuk_hetero\n";
 foreach my $chr(@chr){
 		foreach my $posi (sort{$a <=> $b}keys(%{$all_vcf{$chr}})){
 				foreach my $alt (keys %{$all_vcf{$chr}{$posi}}){
 						my @line=split(/\t/,$all_vcf{$chr}{$posi}{$alt}{'all'});
-						my ($ac,$aa,$ra,$an)=($all_vcf{$line[0]}{$line[1]}{$alt}{'AC'},
-											  $all_vcf{$line[0]}{$line[1]}{$alt}{'AA'},
-											  $all_vcf{$line[0]}{$line[1]}{$alt}{'RA'},
-											  $all_vcf{$line[0]}{$line[1]}{$alt}{'AN'});
+						my ($ac,$aa,$ra,$an)=($all_vcf{$line[0]}{$posi}{$alt}{'AC'},
+											  $all_vcf{$line[0]}{$posi}{$alt}{'AA'},
+											  $all_vcf{$line[0]}{$posi}{$alt}{'RA'},
+											  $all_vcf{$line[0]}{$posi}{$alt}{'AN'});
+						if($an==0){next;}
 						print OUT1 "$chr\t$posi\t$line[2]\t$line[3]\t$alt\t$line[5]\t$line[6]\tAC=$ac;AN=$an;Althomo=$aa;hetero=$ra\t$line[8]\n";
 						print OUT2 "$chr\t$posi\t$line[3]\t$alt\t$ac\t$an\t$aa\t$ra\n";
 				}
