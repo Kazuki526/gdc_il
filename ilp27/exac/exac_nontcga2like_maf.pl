@@ -96,7 +96,7 @@ foreach my $chr (@chr){
 												print OUT "$chr\t$pos\t$line[2]\t$line[3]\t$alt[$i]\t$line[5]\t$line[6]\tAC=$ac[$i];AN=$line[8]\n";
 										}
 								}else{
-										print OUT "$chr\t$pos\t".join("\t",@line[2..6])."AC=$line[7];AN=$line[8]\n";
+										print OUT "$chr\t$pos\t".join("\t",@line[2..6])."\tAC=$line[7];AN=$line[8]\n";
 								}
 						}else{
 								if($line[4] =~ /,/){
