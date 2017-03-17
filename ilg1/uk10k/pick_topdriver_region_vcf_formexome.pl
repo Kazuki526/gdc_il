@@ -26,22 +26,23 @@ while(<BED>){
 		}else{
 				$bed{$line[0]}="$line[1]-$line[2]";
 		}
-		if(!grep(@chr,$line[0])){push(@chr,"$line[0]");}
+		if(!grep($_ eq $line[0],@chr)){push(@chr,"$line[0]");}
 }
 close BED;
 
 my @ls=`ls allvcf`;chomp @ls;
 #make to liftover bed
+my $chr="";
+
 open(VCF,"gunzip -c allvcf/$ls[0]|") or die "ERROR:cant gunzip-c allvcf/$ls[0]\n";
 print "writing toLiftover bed files\n";
-my $chr="";
 while(<VCF>){
 		if($_=~/^#/){next;}
 		chomp;
 		my @line=split(/\t/,);
 		if($chr ne "$line[0]"){
 				if($chr ne ""){close OUT;}
-				if(!grep(@chr,$line[0])){last;}
+				if(!grep($_ eq $line[0],@chr)){last;}
 				$chr=$line[0];
 				open(OUT,">toLiftover/chr$chr.bed");
 		}
@@ -49,17 +50,17 @@ while(<VCF>){
 		#each position donot changed chromosome so not print out hg19:chr
 		print OUT "chr$line[0]\t$line[1]\t$end\t$line[1]\n";
 }
-close VCF;
 
+close VCF;
 my %focal=();
 foreach $chr(@chr){
 		print "liftover chr$chr\n";
-		my %remap= map{chomp;my @c=split(/\t/,);$c[0]=~s/^chr//;($c[0]=>{$c[3]=>$c[1]})}`$liftover toLiftover/chr$chr.bed $chainfile /dev/stdout /dev/null 2>/dev/null`;
-		foreach my $posi(keys %{$remap{$chr}}){
+		my %remap= map{chomp;my @c=split(/\t/,);$c[0]=~s/^chr//;($c[3]=>$c[1])}`$liftover toLiftover/chr$chr.bed $chainfile /dev/stdout /dev/null 2>/dev/null`;
+		foreach my $posi(keys %remap){
 				foreach my $focal_region(split(/:/,$bed{$chr})){
 						my ($start,$end)=split(/-/,$focal_region);
-						if(($start <= $remap{$chr}{$posi})&&($remap{$chr}{$posi} <= $end)){
-								$focal{$chr}{$posi}=$remap{$chr}{$posi};
+						if(($start <= $remap{$posi})&&($remap{$posi} <= $end)){
+								$focal{$chr}{$posi}=$remap{$posi};
 								last;
 						}
 				}
