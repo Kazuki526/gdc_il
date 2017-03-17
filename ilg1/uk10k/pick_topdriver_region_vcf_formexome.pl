@@ -10,6 +10,8 @@ my $liftover=$ENV{'HOME'}."/liftover/liftover";
 (-e $liftover) or die "ERROR:liftover not exist at $liftover\n";
 my $chainfile=$ENV{"HOME"}."/liftover/hg19ToHg38.over.chain";
 (-e $chainfile) or die "ERROR:chain file not exist at $chainfile\n";
+my $hg38=$ENV{"HOME"}."/liftover/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz";
+(-e $hg38 ) or die "ERROR:hg38 fasta not exist at $hg38\n";
 
 my $bed_file="/Volumes/areca42TB/tcga/maf_norm/top_driver105.bed";
 (-e $bed_file) or die "ERROR:topdriver bed file:$bed_file is moved?\n";
@@ -87,16 +89,36 @@ foreach my $file(@ls){
 				my @line=split(/\t/,);
 				if($line[0] eq "#CHROM"){
 						if($file_num==1){
-								$header.=join("\t",@line[0..8])."\n";
+								$header.=join("\t",@line[0..7])."\n";
 						}
 						next;
 				}
 				if(!defined $focal{$line[0]}{$line[1]}){next;}
 				my $posi=$focal{$line[0]}{$line[1]};
 				my @alt=split(/,/,$line[4]);
+				my $fasta=`samtools faidx $hg38 $line[0]:$posi-$posi`;
+				my ($region,$ref)=split(/\n/,$fasta);
+				if(grep{length($_) >1}($line[3],@alt)){
+						if($line[3] !~ /^$ref/){print "WARNING:chr$line[0]:$posi ref_colum is not same with hg38 reference\n";}
+				}else{
+						if($line[3] ne $ref ){
+								my $altn=0;
+								for(my $t=1;@alt >= $t;$t++){
+										if($alt[$t-1] eq $ref){
+												$altn=$t;
+												$alt[$t-1]=$line[3];
+												$line[3]=$ref;
+										}
+								}
+								if($altn==0){die "ERROR:chr$chr:$posi not have alt seq of correct ref\n";}
+								for(my $i=9;@line > $i;$i++){
+										eval "\$line[$i]=~ tr/0:$altn/$altn:0/";
+								}
+						}
+				}
 				if($file_num==1){
 						foreach my $alt (@alt){
-								$all_vcf{$line[0]}{$posi}{$alt}{'all'}=join("\t",@line[0..6])."\t.\t$line[8]";
+								$all_vcf{$line[0]}{$posi}{$alt}{'all'}=join("\t",@line[0..6])."\t.";
 								$all_vcf{$line[0]}{$posi}{$alt}{'AN'}=0;
 								$all_vcf{$line[0]}{$posi}{$alt}{'AC'}=0;
 								$all_vcf{$line[0]}{$posi}{$alt}{'AA'}=0;#alt homo patient count
@@ -134,7 +156,7 @@ foreach my $chr(@chr){
 											  $all_vcf{$line[0]}{$posi}{$alt}{'RA'},
 											  $all_vcf{$line[0]}{$posi}{$alt}{'AN'});
 						if($an==0){next;}
-						print OUT1 "$chr\t$posi\t$line[2]\t$line[3]\t$alt\t$line[5]\t$line[6]\tAC=$ac;AN=$an;Althomo=$aa;hetero=$ra\t$line[8]\n";
+						print OUT1 "$chr\t$posi\t$line[2]\t$line[3]\t$alt\t$line[5]\t$line[6]\tAC=$ac;AN=$an;Althomo=$aa;hetero=$ra\n";
 						print OUT2 "$chr\t$posi\t$line[3]\t$alt\t$ac\t$an\t$aa\t$ra\n";
 				}
 		}
