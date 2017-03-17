@@ -45,7 +45,7 @@ while(<VCF>){
 				$chr=$line[0];
 				open(OUT,">toLiftover/chr$chr.bed");
 		}
-		my $end=$line[0]+1;
+		my $end=$line[1]+1;
 		#each position donot changed chromosome so not print out hg19:chr
 		print OUT "chr$line[0]\t$line[1]\t$end\t$line[1]\n";
 }
