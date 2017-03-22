@@ -48,7 +48,7 @@ while(<VCF>){
 				my ($ac,$an,$csq);
 				if($line[7]=~/AC=([0-9,]+);.+;AN=(\d+);.+;CSQ=(.+)$/){
 						($ac,$an,$csq)=($1,$2,$3);
-				}
+				}else{die "ERROR:cannot extract AC,AN,CAQ from $_\n";}
 				my $focal=0;
 				my @csq=split(/,/,$csq);
 				for(my $i=0;@csq > $i;$i++){
@@ -56,10 +56,36 @@ while(<VCF>){
 						if(defined $driver_genes{$info[$info{'SYMBOL'}]}){$focal++;}
 				}
 				if($focal>0){
-						if((length($line[3])>1)||(length($line[4]) >1)){next;}
-						print OUTV join("\t",@line[0..6])."\t$ac\t$an\n";
-						my $end=$line[1]+1;
-						print OUTB "chr$line[0]\t$line[1]\t$end\t$line[0]:$line[1]\n";
+#						if((length($line[3])>1)||(length($line[4]) >1)){next;}
+						if($line[4]=~/,/){
+								my $ref;
+								my @alt=split(/,/,$line[4]);
+								my @ac=split(/,/,$ac);
+								my (@altout,@acout)=();
+								for(my $i=0;@alt > $i;$i++){
+										if(length($line[3])==1 and length($alt[$i])==1){
+												push(@altout,$alt[$i]);
+												push(@acout,$ac[$i]);
+												$ref=$line[3];
+										}elsif(length($line[3]) == length($alt[$i])){
+												$ref=substr($line[3],0,1);
+												my $altnuc=substr($alt[$i],0,1);
+												if($ref eq $altnuc){die "ERROR:un expected line of ref&alt $_\n";}
+												push(@altout,$altnuc);
+												push(@acout,$ac[$i]);
+										}
+								}
+								if(scalar(@altout) ==0){next;}
+								my $alt=join(",",@altout);
+								$ac=join(",",@acout);
+								print OUTV join("\t",@line[0..2])."\t$ref\t$alt\t$line[5]\t$line[6]\t$ac\t$an\n";
+								my $end=$line[1] +1;
+								print OUTB "chr$line[0]\t$line[1]\t$end\t$line[0]:$line[1]\n";
+						}elsif(length($line[3])==1 and length($line[4])==1 and $line[4] ne "-"){
+								print OUTV join("\t",@line[0..6])."\t$ac\t$an\n";
+								my $end=$line[1] +1;
+								print OUTB "chr$line[0]\t$line[1]\t$end\t$line[0]:$line[1]\n";
+						}
 				}
 		}
 }
