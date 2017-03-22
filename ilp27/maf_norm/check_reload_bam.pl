@@ -45,7 +45,7 @@ while(<MANI>){
 						if(!defined $tailb){$taila="0\t0\t0";}
 						if(($tailb[2] ne "chrX")&&($tailb[3] > 134428791)&&($taila ne $tailb)){$taila=$tailb;
 						}else{
-								if(($taila eq $tailb)&&(`samtools view $bamdir/$line[1]|head -n 1` =~ /EOF\smarker\sis\sabsent/)){next;}
+								if(($taila eq $tailb)&&(`samtools view $bamdir/$line[1] 2>&1|head -n 1` =~ /EOF\smarker\sis\sabsent/)){next;}
 								$focal++;
 								print "$linen:$line[1] redownloaded $tailb[2]:$tailb[3] is ok\n";
 								}
