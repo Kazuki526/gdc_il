@@ -43,7 +43,7 @@ while(<MANI>){
 						my $tailb=`samtools view $bamdir/$line[1] |tail -n 1`;
 						if(!$tailb){$tailb="0\t0\t0\t0";}
 						my @tailb=split(/\t/,$tailb);
-						if($tailb[2] eq "chrX")&&($tailb[3] > 134428791)){
+						if(($tailb[2] eq "chrX")&&($tailb[3] > 134428791)){
 								$focal++;
 								print "$linen:$line[1] redownloaded $tailb[2]:$tailb[3] is ok\n";
 						}elsif(($tailb[0] != 0)&&(`samtools view $bamdir/$line[1] 2>&1|head -n 1` !~ /EOF\smarker\sis\sabsent/)){
