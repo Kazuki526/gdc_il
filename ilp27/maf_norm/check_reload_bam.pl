@@ -41,14 +41,18 @@ while(<MANI>){
 				while($focal==0){
 						system("curl --header \"X-Auth-Token: $token\" --request POST https://gdc-api.nci.nih.gov/slicing/view/$line[0] --header \"Content-Type: application/json\" -d\@$json --output $bamdir/$line[1] > /dev/null 2>&1");
 						my $tailb=`samtools view $bamdir/$line[1] |tail -n 1`;
+						if(!$tailb){$tailb="0\t0\t0\t0";}
 						my @tailb=split(/\t/,$tailb);
-						if(!defined $tailb){$taila="0\t0\t0";}
-						if(($tailb[2] ne "chrX")&&($tailb[3] > 134428791)&&($taila ne $tailb)){$taila=$tailb;
-						}else{
-								if(($taila eq $tailb)&&(`samtools view $bamdir/$line[1] 2>&1|head -n 1` =~ /EOF\smarker\sis\sabsent/)){next;}
+						if($tailb[2] eq "chrX")&&($tailb[3] > 134428791)){
 								$focal++;
 								print "$linen:$line[1] redownloaded $tailb[2]:$tailb[3] is ok\n";
-								}
+						}elsif(($tailb[0] != 0)&&(`samtools view $bamdir/$line[1] 2>&1|head -n 1` !~ /EOF\smarker\sis\sabsent/)){
+								$focal++;
+								print "$linen:$line[1] redownloaded $tailb[2]:$tailb[3] is ok\n";
+						}else{
+								$taila=$tailb;
+								print "$linen:$line[1] download error. download again";
+						}
 				}
 		}
 
