@@ -5,6 +5,17 @@ use warnings;
 my $vcfpath="/working/1000genomes/topdrivers";
 (-e $vcfpath) or die "ERROR:not exist $vcfpath\n";
 
+my $liftover=$ENV{'HOME'}."/liftover/liftover";
+(-e $liftover) or die "ERROR:liftover not exist at $liftover\n";
+my $chainfile=$ENV{"HOME"}."/liftover/hg19ToHg38.over.chain";
+(-e $chainfile) or die "ERROR:chain file not exist at $chainfile\n";
+my $hg38=$ENV{"HOME"}."/liftover/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz";
+(-e $hg38 ) or die "ERROR:hg38 fasta not exist at $hg38\n";
+
+my $bed_file="/Volumes/areca42TB/tcga/maf_norm/top_driver105.bed";
+(-e $bed_file) or die "ERROR:topdriver bed file:$bed_file is moved?\n";
+
+
 my @files=`ls $vcfpath|grep 'vcf.gz\$'`;chomp @files;
 
 open(OUT,">/working/1000genomes/maf/extarct/ac0_variation.tsv");
