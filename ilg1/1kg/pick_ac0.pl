@@ -74,7 +74,9 @@ foreach my $region(sort(keys %ac0)){
 		if(defined $bed{$remap{$region}}){
 				my ($chr,$start)=split(/:/,$remap{$region});
 				my ($ref,$alt,$ac,$an)=split(/\t/,$ac0{$region});
-				my $ref_liftovered=`samtools faidx $hg38 $chr:$start-$start`;
+				my $faindex=`samtools faidx $hg38 $chr:$start-$start`;
+				my ($fa_region,$ref_liftovered)=split(/\n/,$faindex,2);
+				$ref_liftovered=~s/\s//;
 				if($ref ne $ref_liftovered){
 						if($alt ne $ref_liftovered){$ref=$ref_liftovered;
 						}else{next;}
