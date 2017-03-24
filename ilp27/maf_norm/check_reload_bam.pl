@@ -46,7 +46,7 @@ while(<MANI>){
 						if(($tailb[2] eq "chrX")&&($tailb[3] > 134428791)){
 								$focal++;
 								print "$linen:$line[1] redownloaded $tailb[2]:$tailb[3] is ok\n";
-						}elsif(($tailb[0] != 0)&&(`samtools view $bamdir/$line[1] 2>&1|head -n 1` !~ /EOF\smarker\sis\sabsent/)){
+						}elsif(($tailb[3] != 0)&&(`samtools view $bamdir/$line[1] 2>&1|head -n 1` !~ /EOF\smarker\sis\sabsent/)){
 								$focal++;
 								print "$linen:$line[1] redownloaded $tailb[2]:$tailb[3] is ok\n";
 						}else{
