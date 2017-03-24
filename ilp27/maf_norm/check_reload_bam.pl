@@ -51,7 +51,7 @@ while(<MANI>){
 								print "$linen:$line[1] redownloaded $tailb[2]:$tailb[3] is ok\n";
 						}else{
 								$taila=$tailb;
-								print "$linen:$line[1] download error. download again";
+								print "$linen:$line[1] download error. download again\n";
 						}
 				}
 		}
