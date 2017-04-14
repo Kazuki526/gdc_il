@@ -52,7 +52,7 @@ foreach my $sample (@sample){
 										if(length($vcf_main[3]) == length($alt[$gti])){
 												my ($ref,$alt)=(substr($vcf_main[3],1,0),substr($alt[$gti],1,0));
 												print OUT1 join("\t",@vcf_main[0..2])."\t$ref\t$alt\t".join("\t",@vcf_main[5..8])."\t$gt[0]";
-										}else
+										}else{
 												$vcf_main[4]=$alt[$gti];
 												print OUT1 join("\t",@vcf_main)."\t$gt[0]\n";
 										}
@@ -63,7 +63,7 @@ foreach my $sample (@sample){
 										if(length($vcf_main[3]) == length($alt[$gti])){
 												my ($ref,$alt)=(substr($vcf_main[3],1,0),substr($alt[$gti],1,0));
 												print OUT2 join("\t",@vcf_main[0..2])."\t$ref\t$alt\t".join("\t",@vcf_main[5..8])."\t$gt[1]";
-										}else
+										}else{
 												$vcf_main[4]=$alt[$gti];
 												print OUT2 join("\t",@vcf_main)."\t$gt[1]\n";
 										}
