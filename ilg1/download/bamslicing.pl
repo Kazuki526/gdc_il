@@ -43,28 +43,25 @@ while(<MAN>){
 				print "$linen:curl $line[1] now\n";
 				system("curl --header \"X-Auth-Token: $token\" --request POST https://gdc-api.nci.nih.gov/slicing/view/$line[0] --header \"Content-Type: application/json\" -d\@$json --output $bamdir/$line[1] > /dev/null 2>&1");
 		}
-		print "$linen:$line[1] doing\n";
-		my $taila=`samtools view $bamdir/$line[1] |tail -n 1`;
-		if(!$taila){$taila="0\t0\t0\t0";}
-		my @taila=split(/\t/,$taila);
-		if(($taila[2] ne "chrX")||($taila[3] < 134428789 )){
-				print "$linen:$line[1] chr $taila[2]:$taila[3] eq not chrX:134428789~ so download again\n";
-				my $focal=0;
-				while($focal==0){
+		print "$linen:$line[1] checking\n";
+		my $taila;
+		my $focal=0;
+		while($focal==0){
+				my $tailb=`samtools view $bamdir/$line[1] |tail -n 1`;
+				if(!$tailb){$tailb="0\t0\t0\t0";}
+				my @tailb=split(/\t/,$tailb);
+				if(($tailb[2] eq "chrX")&&($tailb[3] > 134428789)){
+						$focal++;
+						print "$linen:$line[1] redownloaded $tailb[2]:$tailb[3] is ok\n";
+				}elsif(($tailb[3] != 0)&&(`samtools view $bamdir/$line[1] 2>&1|head -n 1` !~ /EOF\smarker\sis\sabsent/)){
+						$focal++;
+						print "$linen:$line[1] redownloaded $tailb[2]:$tailb[3] is ok\n";
+				}else{
+						$taila=$tailb;
+						print "$linen:$line[1] download error. download again\n";
+				}
+				if($focal==0){
 						system("curl --header \"X-Auth-Token: $token\" --request POST https://gdc-api.nci.nih.gov/slicing/view/$line[0] --header \"Content-Type: application/json\" -d\@$json --output $bamdir/$line[1] > /dev/null 2>&1");
-						my $tailb=`samtools view $bamdir/$line[1] |tail -n 1`;
-						if(!$tailb){$tailb="0\t0\t0\t0";}
-						my @tailb=split(/\t/,$tailb);
-						if(($tailb[2] eq "chrX")&&($tailb[3] > 134428789)){
-								$focal++;
-								print "$linen:$line[1] redownloaded $tailb[2]:$tailb[3] is ok\n";
-						}elsif(($tailb[3] != 0)&&(`samtools view $bamdir/$line[1] 2>&1|head -n 1` !~ /EOF\smarker\sis\sabsent/)){
-								$focal++;
-								print "$linen:$line[1] redownloaded $tailb[2]:$tailb[3] is ok\n";
-						}else{
-								$taila=$tailb;
-								print "$linen:$line[1] download error. download again\n";
-						}
 				}
 		}
 
