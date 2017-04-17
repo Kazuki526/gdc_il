@@ -31,17 +31,20 @@ my $json=$ENV{"HOME"}."/git/gdc_il/ilp27/maf_norm/top_driverallexon_json.txt";
 
 while(<MAN>){
 		$line_num++;
-		
+		if($line_num <345){next;}
 		#forks and returns the pid for child
-		my $pid = $pm->start and next;
+#		my $pid = $pm->start and next;
 
 #		if($start_line_num > $line_num){next;
 #		}elsif($end_line_num < $line_num){last;}
 		chomp;
 		my @line=split(/\t/,);
 		print "$line_num:curl $line[1] now\n";
-		system("curl --header \"X-Auth-Token: $token\" --request POST https://gdc-api.nci.nih.gov/slicing/view/$line[0] --header \"Content-Type: application/json\" -d\@$json --output $bamdir/$line[1] > /dev/null 2>&1");
+		#system("curl --header \"X-Auth-Token: $token\" --request POST https://gdc-api.nci.nih.gov/slicing/view/$line[0] --header \"Content-Type: application/json\" -d\@$json --output $bamdir/$line[1] > /dev/null 2>&1");
+		system("curl --header \"X-Auth-Token: $token\" --request POST https://gdc-api.nci.nih.gov/slicing/view/$line[0] --header \"Content-Type: application/json\" -d\@$json --output $bamdir/$line[1]");
+		last;
 
-		$pm->finish; #terminates the child process
+#		$pm->finish; #terminates the child process
 }
+close MAN;
 exit;
