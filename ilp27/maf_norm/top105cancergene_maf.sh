@@ -17,5 +17,5 @@ export PERL5LIB=$VEP_PATH:$PERL5LIB
 export PATH=$VEP_PATH/htslib:$PATH
 export PATH=$HOME/vep/samtools/bin:$PATH
 cd ~/mskcc-vcf2maf-be943f6
-perl vcf2maf.pl --input-vcf /Volumes/cancer/kaz_gdc/$1/samtools/$3.vcf --output-maf /Volumes/cancer/kaz_gdc/$1/maf/$3.maf --vep-path $VEP_PATH --vep-data $VEP_DATA --ref-fasta ~/.vep/homo_sapiens/86_GRCh38/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz --ncbi-build GRCh38
+perl vcf2maf.pl --input-vcf /Volumes/cancer/kaz_gdc/$1/samtools/$3.vcf --output-maf /Volumes/cancer/kaz_gdc/$1/maf/$3.maf --vep-path $VEP_PATH --vep-data $VEP_DATA --ref-fasta ~/.vep/homo_sapiens/86_GRCh38/Homo_sapiens.GRCh38.dna.primary_assembly.fa --ncbi-build GRCh38
 

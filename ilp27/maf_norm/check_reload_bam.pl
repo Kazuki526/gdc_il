@@ -26,6 +26,7 @@ my $json=$ENV{"HOME"}."/git/gdc_il/ilp27/maf_norm/top_driverallexon_json.txt";
 ($json and -e $json) or die "ERROR:$json not exist!!";
 while(<MANI>){
 		$linen++;
+		if($linen < 340){next;}
 		#forks and returns the pid for child
 		my $pid = $pm->start and next;
 		

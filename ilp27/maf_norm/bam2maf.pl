@@ -12,7 +12,7 @@ if($pwd ne "/Volumes/cancer/kaz_gdc"){die "!!ERROR!! doing on wrong dir\n";}
 my $bp=$ARGV[0]; #body part
 my $bamdir="$bp/$bp"."_norm_cancergenes_bam";
 
-#system("perl ~/git/gdc_il/ilp27/maf_norm/check_reload_bam.pl $bp");
+system("perl ~/git/gdc_il/ilp27/maf_norm/check_reload_bam.pl $bp");
 $|=1;
 
 my $json=`ls $bp|grep 'bam_json.txt'`;chomp $json;
