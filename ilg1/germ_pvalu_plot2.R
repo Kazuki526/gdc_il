@@ -28,33 +28,33 @@ topdriver_bed=read_tsv("/Volumes/areca42TB/tcga/maf_norm/top_driver105.bed",col_
 tidyr::separate(ids,c("gene_symbol","ensg"),sep=";")
 classify_consequence = function(.data) {
     dplyr::mutate(.data, mutype= dplyr::recode(Consequence,
-                                   downstream_gene_variant = 'flank',
-                                   `3_prime_UTR_variant` = 'flank',
-                                   upstream_gene_variant = 'flank',
-                                   `5_prime_UTR_variant` = 'flank',
-                                   frameshift_variant = 'truncating',
-                                   frameshift_variant = 'truncating',
-                                   inframe_deletion = 'inframe_indel',
-                                   inframe_insertion = 'inframe_indel',
-                                   intron_variant = 'silent',
-                                   splice_region_variant = 'splice',
-                                   coding_sequence_variant = 'missense',
-                                   missense_variant = 'missense',
-                                   stop_gained = 'truncating',
-                                   stop_lost = 'truncating',
-                                   stop_retained_variant = 'silent',
-                                   synonymous_variant = 'silent',
-                                   splice_acceptor_variant = 'splice',
-                                   splice_donor_variant = 'splice',
-                                   protein_altering_variant = 'missense',
-                                   start_lost = 'truncating',
-                                   `splice_region_variant,intron_variant` = 'splice',
-                                   `stop_gained,frameshift_variant` = 'truncating',
-                                   `splice_region_variant,synonymous_variant`='splice',
-                                   `splice_region_variant,5_prime_UTR_variant`='splice',
-                                   `missense_variant,splice_region_variant`='missense',
-                                   `intron_variant,non_coding_transcript_variant`='silent',
-                                   `non_coding_transcript_exon_variant,non_coding_transcript_variant`='silent'))
+                                               downstream_gene_variant = 'flank',
+                                               `3_prime_UTR_variant` = 'flank',
+                                               upstream_gene_variant = 'flank',
+                                               `5_prime_UTR_variant` = 'flank',
+                                               frameshift_variant = 'truncating',
+                                               frameshift_variant = 'truncating',
+                                               inframe_deletion = 'inframe_indel',
+                                               inframe_insertion = 'inframe_indel',
+                                               intron_variant = 'silent',
+                                               splice_region_variant = 'splice',
+                                               coding_sequence_variant = 'missense',
+                                               missense_variant = 'missense',
+                                               stop_gained = 'truncating',
+                                               stop_lost = 'truncating',
+                                               stop_retained_variant = 'silent',
+                                               synonymous_variant = 'silent',
+                                               splice_acceptor_variant = 'splice',
+                                               splice_donor_variant = 'splice',
+                                               protein_altering_variant = 'inframe_indel',
+                                               start_lost = 'truncating',
+                                               `splice_region_variant,intron_variant` = 'splice',
+                                               `stop_gained,frameshift_variant` = 'truncating',
+                                               `splice_region_variant,synonymous_variant`='splice',
+                                               `splice_region_variant,5_prime_UTR_variant`='splice',
+                                               `missense_variant,splice_region_variant`='missense',
+                                               `intron_variant,non_coding_transcript_variant`='silent',
+                                               `non_coding_transcript_exon_variant,non_coding_transcript_variant`='silent'))
 }
 driver_genes=read_tsv("~/git/driver_genes/driver_genes.tsv")%>>%
   filter(refs>3) %>>%
@@ -65,6 +65,7 @@ driver_genes=read_tsv("~/git/driver_genes/driver_genes.tsv")%>>%
 lung_norm_maf_all=read_tsv("./maf_norm/united_maf/lung_all_site.maf",col_types = "cccciiccccc")
 breast_norm_maf_all=read_tsv("./maf_norm/united_maf/breast_all_site.maf",col_types = "cccciiccccc")
 brain_norm_maf_all=read_tsv("./maf_norm/united_maf/brain_all_site.maf",col_types = "cccciiccccc")
+kidney_norm_maf_all=read_tsv("./maf_norm/united_maf/kidney_all_site.maf",col_types = "cccciiccccc")
 
 ###tally  maf###
 tally_lung_all = lung_norm_maf_all %>>%
@@ -75,7 +76,7 @@ tally_lung_all = lung_norm_maf_all %>>%
   summarise(ac_lung=n()) %>>%
   left_join(lung_norm_maf_all %>>% group_by(patient_id,chr,start,alt) %>>%mutate(variant_num=n()) %>>%
   filter(variant_num==2) %>>%group_by(chr,start,end,alt) %>>%summarise(homo_lung=n()))
-  tally_brain_all = brain_norm_maf_all %>>%
+tally_brain_all = brain_norm_maf_all %>>%
   filter(!str_detect(Consequence,"intron_variant")) %>>%
   filter(!mutype=="flank") %>>%
   filter(!str_detect(Consequence, "frame")) %>>%
@@ -91,8 +92,16 @@ tally_breast_all = breast_norm_maf_all %>>%
   summarise(ac_breast=n()) %>>%
   left_join(breast_norm_maf_all %>>% group_by(patient_id,chr,start,alt) %>>%mutate(variant_num=n()) %>>%
   filter(variant_num==2) %>>%group_by(chr,start,end,alt) %>>%summarise(homo_breast=n()))
+tally_kidney_all = breast_kidney_maf_all %>>%
+  filter(!str_detect(Consequence,"intron_variant")) %>>%
+  filter(!mutype=="flank") %>>%
+  filter(!str_detect(Consequence, "frame")) %>>%
+  group_by(gene_symbol,ref,alt,chr,start,end,mutype,PolyPhen,Consequence) %>>%
+  summarise(ac_breast=n()) %>>%
+  left_join(breast_norm_maf_all %>>% group_by(patient_id,chr,start,alt) %>>%mutate(variant_num=n()) %>>%
+              filter(variant_num==2) %>>%group_by(chr,start,end,alt) %>>%summarise(homo_breast=n()))
 tally_all=full_join(tally_lung_all,tally_brain_all) %>>%
-  full_join(tally_breast_all) %>>%
+  full_join(tally_breast_all) %>>%full_join(tally_kidney_all) %>>%
   mutate(ac_lung  =as.double(ifelse(is.na(ac_lung  ),0,ac_lung)  ),
          ac_brain =as.double(ifelse(is.na(ac_brain ),0,ac_brain) ),
          ac_breast=as.double(ifelse(is.na(ac_breast),0,ac_breast))) %>>%
@@ -109,8 +118,10 @@ brain_coverage =read_tsv("/Volumes/areca42TB/tcga/maf_norm/brain/depth/coverage_
                          col_names = c("chr","start","an_brain"),col_types = "cdd")
 breast_coverage=read_tsv("/Volumes/areca42TB/tcga/maf_norm/breast/depth/coverage_all_data_exist_patient.tsv",
                          col_names = c("chr","start","an_breast"),col_types = "cdd")
+kideny_coverage=read_tsv("/Volumes/areca42TB/tcga/maf_norm/kidney/depth/coverage_all_data_exist_patient.tsv",
+                         col_names = c("chr","start","an_breast"),col_types = "cdd")
 cancer_coverage=full_join(lung_coverage,brain_coverage) %>>%
-  full_join(breast_coverage) %>>%
+  full_join(breast_coverage) %>>%full_join(kidney_coverage) %>>%
   mutate(an_lung  =ifelse(is.na(an_lung  ),0,an_lung  ),
          an_brain =ifelse(is.na(an_brain ),0,an_brain ),
          an_breast=ifelse(is.na(an_breast),0,an_breast)) %>>%
@@ -126,7 +137,10 @@ lung_maf=full_join(lusc_maf,luad_maf) %>>%
   dplyr::select(-Tumor_Sample_Barcode,-gender) %>>%
   mutate(bodypart="lung")
 breast_maf=read_tsv("kaz_maf/extracted_maf/brca_topdriver105genes.maf") %>>%
-  mutate(bodypart="breast")
+  mutate(bodypart="breast") %>>%
+  left_join(read_tsv("maf_norm/breast/depth/gender_file.tsv")) %>>%
+  filter(!is.na(gender))%>>%
+  dplyr::select(-Tumor_Sample_Barcode,-gender)
 lgg_maf=read_tsv("kaz_maf/extracted_maf/lgg_topdriver105genes.maf")
 gbm_maf=read_tsv("kaz_maf/extracted_maf/gbm_topdriver105genes.maf")
 brain_maf=full_join(lgg_maf,gbm_maf) %>>%
@@ -134,6 +148,7 @@ brain_maf=full_join(lgg_maf,gbm_maf) %>>%
   filter(!is.na(gender))%>>%
   dplyr::select(-Tumor_Sample_Barcode,-gender) %>>%
   mutate(bodypart="brain")
+#kidneyまだやってない！！ 
 
 maf_somatic=full_join(lung_maf,breast_maf) %>>%full_join(brain_maf)
 
@@ -141,7 +156,15 @@ maf_somatic=full_join(lung_maf,breast_maf) %>>%full_join(brain_maf)
 lung_cna=read_tsv("./CNA/lung/cel/annotate_ascat.tsv.gz")
 breast_cna=read_tsv("./CNA/breast/cel/annotate_ascat.tsv.gz")
 brain_cna=read_tsv("./CNA/brain/cel/annotate_ascat.tsv.gz")
+kidney_cna=read_tsv("./CNA/kidney/cel/annotate_ascat.tsv.gz")
 
+### gender&age ###
+breast_age=read_tsv("/Volumes/areca42TB2/gdc/varscan/breast/gender_age.tsv")
+lung_age  =read_tsv("/Volumes/areca42TB2/gdc/varscan/lung/gender_age.tsv")
+brain_age =read_tsv("/Volumes/areca42TB2/gdc/varscan/brain/gender_age.tsv")
+
+all_age = full_join(breast_age,lung_age) %>>%full_join(brain_age) %>>%
+  mutate(age=ceiling(age/365.25))
 ###1kg###
 sample_num_1kg=5008
 sample_num_X_1kg=sample_num_1kg - 1233
@@ -224,7 +247,7 @@ all_variant = full_join(tally_1kg_all,tally_all) %>>%
 ##########################################################################
 ##### HWEでパラログっぽいところを除いているのでここ重要!! ################
 errored_variant=all_variant%>>% #(KMT2C以外！)
-filter((HWhet_cancer < hetero_cancer & HWE_p_cancer<1.0e-10)|
+  filter((HWhet_cancer < hetero_cancer & HWE_p_cancer<1.0e-10)|
          (HWhet_1kg < hetero_1kg & HWE_p_1kg<1.0e-10)|
          (HWhet_uk10k < hetero_uk10k & HWE_p_uk10k<1.0e-10))
 all_variant=all_variant %>>%
@@ -308,6 +331,8 @@ AF_more5 = all_variant %>>%
 maf_norm_breast=read_tsv("maf_norm/united_maf/breast_nonsilent.maf")
 maf_norm_lung=read_tsv("maf_norm/united_maf/lung_nonsilent.maf")
 maf_norm_brain=read_tsv("maf_norm/united_maf/brain_nonsilent.maf")
+maf_norm_kidney=read_tsv("maf_norm/united_maf/kidney_nonsilent.maf")
+
 
 #AF 5~95%のmutationを持つpatient抽出
 maf_AF_more5 =full_join(maf_norm_breast,maf_norm_lung) %>>%
@@ -412,7 +437,7 @@ maf_AF_less10%>>%dplyr::count(mutype)
 maf_AF_less10 %>>%group_by(gene_symbol,patient_id) %>>%filter(mutation_score==max(mutation_score)) %>>%
   tally() %>>%filter(n>1) %>>%View
 
-#### 次の次の作図で使用
+#### 次の作図で使用
 ## inframe_indelは復活可
 mutype_order = function(.data) {
   dplyr::mutate(.data, mutation_type_order= dplyr::recode(mutation_type,
@@ -496,23 +521,92 @@ topdriver_cds_bed=read_tsv("~/git/driver_genes/onlytop105/top_driver105cds.bed",
   tidyr::separate(genesymbol,into=c("gene_symbol","ENST","cds_number"),sep = ":") %>>%
   group_by(gene_symbol) %>>%
   mutate(length_cds = end - start +1) %>>%
-  mutate(cumsum_cds=cumsum(length_cds) - length_cds +1) %>>%
+  mutate(cumsum_cds_start=cumsum(length_cds) - length_cds +1, cumsum_cds_end=cumsum(length_cds)) %>>%
   dplyr::select(-length_cds,-score,-cds_number)
+
+#もいちど書いとく
+maf_norm_breast=read_tsv("maf_norm/united_maf/breast_nonsilent.maf")%>>%mutate(bodypart="breast")
+maf_norm_lung=read_tsv("maf_norm/united_maf/lung_nonsilent.maf")%>>%mutate(bodypart="lung")
+maf_norm_brain=read_tsv("maf_norm/united_maf/brain_nonsilent.maf")%>>%mutate(bodypart="brain")
+maf_norm_kidney=read_tsv("maf_norm/united_maf/kidney_nonsilent.maf")%>>%mutate(bodypart="kidney")
+
+
+##mutation_type (ref_minor)
+AF_all = all_variant %>>%full_join(errored_variant%>>%mutate(error="error")) %>>%
+  mutate(mutation_type=ifelse(mutype=="missense",str_extract(PolyPhen,"^\\w+"),mutype))%>>%
+  mutate(focal=ifelse(AF_cancer>0.5,"ref_minor","normal"))%>>%
+  mutate(AF_cancer=ifelse(focal=="ref_minor",1-AF_cancer,AF_cancer),
+         AC_ref=ifelse(focal=="ref_minor",an_cancer-ac_cancer,0)) %>>%
+  dplyr::select(gene_symbol,chr,start,ref,alt,mutation_type,focal,AF_cancer,AC_ref,error)
 
 plot_gands_bygene=function(.row){
   .gene=.row$gene
   .role=.row$role
   cds_bed=topdriver_cds_bed %>>%filter(gene_symbol==.gene)%>>%
     rename(cds_start=start,cds_end=end)
+  .cds_length=max(cds_bed$cumsum_cds_end)
+  .strand=first(cds_bed$strand)
   .somatic = maf_somatic %>>%
     filter(gene_symbol==.gene)%>>%
+    filter(mutype!="silent",mutype!="inframe_indel",mutype!="splice") %>>%
     mutate(chr=str_replace(chr,'^chr','')) %>>%
-    group_by(start,)
+    group_by(gene_symbol,chr,start,ref,allele2,PolyPhen,mutype,bodypart)%>>%tally()%>>%
+    group_by(chr,start,allele2) %>>%arrange(bodypart) %>>%
+    mutate(y_end_posi=log10(cumsum(n)+1),y_start_posi=log10(cumsum(n) - n+1)) %>>%ungroup() %>>%
     left_join(cds_bed) %>>%
     filter(start>=cds_start,start<=cds_end) %>>%
-    
-    
+    mutate(x_posi=start - cds_start + cumsum_cds_start)
+  .somatic_plot=.somatic %>>%
+    mutate(mutation_type=ifelse(mutype=="missense",str_extract(PolyPhen,"^\\w+"),mutype)) %>>%
+    mutate(mutation_type=ifelse(str_detect(mutation_type,"damaging"),"damaging",mutation_type)) %>>%
+    group_by(chr,start,allele2,mutation_type,x_posi) %>>%
+    summarise(y_posi=max(y_end_posi),n_posi=max(y_end_posi)+0.2,n=sum(n))
+  .somatic_allnum=sum(.somatic_plot$n)
+  .somatic_num = .somatic_plot %>>%
+    filter(n>.somatic_allnum*0.2 & n>10)
+  .germ=full_join(maf_norm_brain,maf_norm_breast) %>>% full_join(maf_norm_lung) %>>%
+    filter(gene_symbol==.gene) %>>%
+    filter(mutype!="silent",mutype!="inframe_indel",mutype!="splice") %>>%
+    group_by(gene_symbol,chr,start,ref,alt,PolyPhen,mutype,bodypart)%>>%tally()%>>%
+    group_by(chr,start,alt) %>>% arrange(bodypart) %>>%
+    mutate(y_end_posi=-log10(cumsum(n)+1),y_start_posi= -log10(cumsum(n) -n +1)) %>>%
+    left_join(AF_all) %>>%filter(!(focal=="ref_minor"&y_end_posi!=max(y_end_posi))) %>>%
+    filter(is.na(error))%>>%
+    mutate(y_end_posi=ifelse(focal=="ref_minor",-log10(AC_ref + 1),y_end_posi),
+           bodypart=ifelse(focal=="ref_minor","ref_minor",bodypart)) %>>% ungroup() %>>%
+    left_join(cds_bed) %>>%
+    filter(start>=cds_start,start<=cds_end) %>>%
+    mutate(x_posi=start - cds_start + cumsum_cds_start)
+  .germ_plot = .germ %>>%
+    mutate(mutation_type=ifelse(mutype=="missense",str_extract(PolyPhen,"^\\w+"),mutype)) %>>%
+    mutate(mutation_type=ifelse(str_detect(mutation_type,"damaging"),"damaging",mutation_type)) %>>%
+    group_by(chr,start,alt,mutation_type,x_posi,AF_cancer,focal) %>>%
+    summarise(y_posi=min(y_end_posi),n_posi=min(y_end_posi)-0.2)
+  .germ_num = .germ_plot %>>%
+    filter(AF_cancer>0.01|focal=="ref_minor")%>>%ungroup()%>>%
+    mutate(AF_cancer = as.character(paste0(round(AF_cancer *100),"%")))
+  .plot=ggplot()+
+    geom_segment(aes(x=0,y=0,xend=.cds_length,yend=0))+
+    coord_cartesian(xlim = c(0,.cds_length),ylim = c(-3.7,3))+
+    geom_segment(data=.somatic,aes(x=x_posi,y=y_start_posi,xend=x_posi,yend=y_end_posi,color=bodypart))+
+    geom_segment(data=.germ,aes(x=x_posi,y=y_start_posi,xend=x_posi,yend=y_end_posi,color=bodypart))+
+    geom_point(data=.somatic_plot,aes(x=x_posi,y=y_posi,colour=mutation_type,shape=mutation_type))+
+    geom_point(data=.germ_plot,aes(x=x_posi,y=y_posi,colour=mutation_type,shape=mutation_type))+
+    geom_text(data=.somatic_num,aes(x=x_posi,y=n_posi,label=n))+
+    geom_text(data=.germ_num,aes(x=x_posi,y=n_posi,label=AF_cancer))+
+    scale_shape_manual(values = c(benign=1,damaging=2,truncating=4,unknown=1))+
+    scale_color_manual(values = c(benign="coral",damaging="red",truncating="black",unknown="coral",
+                                  brain="blue",breast="green4",lung="grey50",ref_minor="cyan"))+
+    ggtitle(paste(.gene,.role,paste0("strand",.strand),sep = ":"))+
+    theme_bw()+
+    theme(axis.title = element_blank(),axis.ticks.y = element_blank(),
+          axis.line = element_blank(), axis.text.y = element_blank())
+  gridExtra::rbind.gtable(.plot)
 }
 
-driver_genes %>>%dplyr::select(gene,role) %>>%
-  purrr::by_row(.to=plot,~plot_gands_bygene(.))
+plot_sandg=driver_genes %>>%dplyr::select(gene,role) %>>%
+  filter(gene!="KMT2C") %>>%
+  purrr::by_row(.to="plot",~plot_gands_bygene(.))
+
+ggsave("plot_bygenes_germ_somatic.pdf",gridExtra::marrangeGrob(plot_sandg$plot,nrow = 5,ncol = 1,top = NULL),
+       width = 10,height = 20)
