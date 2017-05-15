@@ -146,11 +146,11 @@ foreach my $pid(keys %patient_inf){
 		push(@ok_patient,$pid);
 		if($patient_inf{$pid}{'file_norm'} =~ /;/){$patient_inf{$pid}{'file_norm'}="$pid.bam";}
 		if($patient_inf{$pid}{'file_tumor'} =~ /;/){
-				chdir "tumor_bam/$bp";
-				my @bam=split(/;/,$patient_inf{$pid}{'file_tumor'});
-				`samtools merge -f $pid.bam @bam`;
-				`samtools index $pid.bam`;
-				chdir $pwd;
+#				chdir "tumor_bam/$bp";
+#				my @bam=split(/;/,$patient_inf{$pid}{'file_tumor'});
+#				`samtools merge -f $pid.bam @bam`;
+#				`samtools index $pid.bam`;
+#				chdir $pwd;
 				$patient_inf{$pid}{'file_tumor'}="$pid.bam";
 		}
 		if($patient_inf{$pid}{'gender'} eq ""){$patient_inf{$pid}{'gender'}=$ascat{$pid}{'gender'}};
@@ -161,9 +161,9 @@ open(OUT,">varscan/$bp/gender_age.tsv");
 print OUT "patient_id\tgender\tage\n";
 foreach my $pid(@ok_patient){
 		print "doing varsca $pid\n";
-		my $normpile = "samtools mpileup -q 1 -f $ref norm_bam/$bp/$patient_inf{$pid}{file_norm}";
-		my $tumorpile= "samtools mpileup -q 1 -f $ref -l $bed tumor_bam/$bp/$patient_inf{$pid}{file_tumor}";
-		`zsh -c \"varscan somatic <\($normpile\) <\($tumorpile\) varscan/$bp/out/$pid --tumor-purity $ascat{$pid}{purity}\"`;
+		my $normpile = "samtools mpileup -q 10 -f $ref norm_bam/$bp/$patient_inf{$pid}{file_norm}";
+		my $tumorpile= "samtools mpileup -q 10 -f $ref -l $bed tumor_bam/$bp/$patient_inf{$pid}{file_tumor}";
+		`zsh -c \"varscan somatic <\($normpile\) <\($tumorpile\) varscan/$bp/out/$pid --tumor-purity $ascat{$pid}{purity} --p-value 0.1 --output-vcf 1\"`;
 		print OUT "$pid\t$patient_inf{$pid}{gender}\t$patient_inf{$pid}{age}\n";
 }
 exit;

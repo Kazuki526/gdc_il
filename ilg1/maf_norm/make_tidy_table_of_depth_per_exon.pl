@@ -54,20 +54,21 @@ foreach my $file(@files){
 		while(<DP>){
 				chomp;
 				my @line=split(/\t/,);
+				my $chr_now="";
 				if($line[0]=~/^chr(.+)$/){
-						$chr=$1;
-						if($chr eq "X"){$chr=23;}
+						$chr_now=$1;
 				}else{die "ERROR:what line? $_\n";}
-				if(!defined$topexon{$chr}{$line[1]}){next;}
-				if($exon ne $topexon{$chr}{$line[1]}){
+				if(!defined$topexon{$chr_now}{$line[1]}){next;}
+				if($exon ne $topexon{$chr_now}{$line[1]}){
 						if($exon ne ""){
 								&print_out($chr,$exon,\@colum,\@dp);
 								for(my $i=2;@colum>$i;$i++){
 										$dp[$i-2]=0;
 								}
 						}
-						$exon=$topexon{$chr}{$line[1]};
+						$exon=$topexon{$chr_now}{$line[1]};
 				}
+				$chr=$chr_now;
 				for(my $i=2;@colum>$i;$i++){
 						$dp[$i-2]+=$line[$i];
 				}
@@ -81,6 +82,7 @@ close OUT;
 #=======================================================
 sub print_out{
 		my($chr,$exon,$colum,$dp)=@_;
+		if($chr eq "X"){$chr=23;}
 		my($gene,$start,$end,$strand)=split(/\t/,$exon);
 		my $leng=$end - $start +1;
 		for(my $i=2;@{$colum} > $i;$i++){
