@@ -27,7 +27,7 @@ my $pm = new Parallel::ForkManager($max_processes);
 my $dev_null=<MAN>;
 my $json=$ENV{"HOME"}."/git/driver_genes/onlytop105/top_driver105exon_json.txt";
 (-e $json) or die "ERROR:$json not exist!!\n";
-open(ERROR,">$bamdir/download_errored_file.txt")
+open(ERROR,">$bamdir/download_errored_file.txt");
 
 while(<MAN>){
 		$linen++;
