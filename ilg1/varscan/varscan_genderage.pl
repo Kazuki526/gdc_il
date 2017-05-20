@@ -95,7 +95,6 @@ for(my $i=0;@colum>$i;$i++){
 while(<RT>){
 		chomp;
 		my @line=split(/\t/,);
-		my @line=split(/\t/,);
 		if(scalar @line != 5){
 				for(my$i=0;5>=$i;$i++){
 						if(!defined$line[$i] ){$line[$i] ="";}
