@@ -47,7 +47,7 @@ classify_consequence = function(.data) {
                                              synonymous_variant = 'silent',
                                              splice_acceptor_variant = 'splice',
                                              splice_donor_variant = 'splice',
-                                             protein_altering_variant = 'missense',
+                                             protein_altering_variant = 'inframe_indel',
                                              start_lost = 'truncating',
                                              `splice_region_variant,intron_variant` = 'splice',
                                              `stop_gained,frameshift_variant` = 'truncating',
@@ -149,6 +149,13 @@ maf_norm_lung=read_tsv("maf_norm/united_maf/lung_nonsilent.maf")
 #write_df(maf_norm_brain,"maf_norm/united_maf/brain_nonsilent.maf")
 maf_norm_brain=read_tsv("maf_norm/united_maf/brain_nonsilent.maf")
 
+#maf_norm_kidney=extract_norm_maf("kidney")
+#write_df(maf_norm_kidney,"maf_norm/united_maf/kidney_nonsilent.maf")
+maf_norm_kidney=read_tsv("maf_norm/united_maf/kidney_nonsilent.maf")
+
+#maf_norm_colorectal=extract_norm_maf("colorectal")
+#write_df(maf_norm_colorectal,"maf_norm/united_maf/colorectal_nonsilent.maf")
+maf_norm_colorectal=read_tsv("maf_norm/united_maf/colorectal_nonsilent.maf")
 
 #########silent###############
 extract_norm_maf_silent=function(.bp){
@@ -184,14 +191,23 @@ maf_norm_breast_silent=read_tsv("maf_norm/united_maf/breast_silent.maf")
 maf_norm_lung_silent=read_tsv("maf_norm/united_maf/lung_silent.maf")
 
 #maf_norm_brain_silent=extract_norm_maf_silent("brain")
-#write_df(maf_norm_lung_silent,"maf_norm/united_maf/brain_silent.maf")
+#write_df(maf_norm_brain_silent,"maf_norm/united_maf/brain_silent.maf")
 maf_norm_brain_silent=read_tsv("maf_norm/united_maf/brain_silent.maf")
+
+#maf_norm_kidney_silent=extract_norm_maf_silent("kidney")
+#write_df(maf_norm_kidney_silent,"maf_norm/united_maf/kidney_silent.maf")
+maf_norm_kidney_silent=read_tsv("maf_norm/united_maf/kidney_silent.maf")
+
+#maf_norm_colorectal_silent=extract_norm_maf_silent("colorectal")
+#write_df(maf_norm_colorectal_silent,"maf_norm/united_maf/colorectal_silent.maf")
+maf_norm_colorectal_silent=read_tsv("maf_norm/united_maf/colorectal_silent.maf")
 ###########################################
 ######### somatic mutaion #################
 ###########################################
 
 #if .bp=lung it is lusc luad is correct
 #       brain it is lgg gbm is correct
+#       kidney it is kirc kirp kich
 muse_mutect_every_path=function(.bp){
   .colnames = c('Hugo_Symbol','Chromosome','Start_Position','End_Position','Reference_Allele','Tumor_Seq_Allele1',
                 'Tumor_Seq_Allele2','Consequence','PolyPhen','FILTER','Tumor_Sample_Barcode')
@@ -242,6 +258,31 @@ lgg_maf=read_tsv("kaz_maf/extracted_maf/lgg_topdriver105genes.maf")
 gbm_maf=read_tsv("kaz_maf/extracted_maf/gbm_topdriver105genes.maf")
 brain_maf=full_join(lgg_maf,gbm_maf) %>>%
   left_join(read_tsv("maf_norm/brain/depth/gender_file.tsv")) %>>%
+  filter(!is.na(gender))%>>%
+  dplyr::select(-Tumor_Sample_Barcode,-gender)
+
+#kirc_maf=muse_mutect_every_path("kirc")%>>%mutate(cancer_type="KIRC")
+#write_df(kirc_maf,"kaz_maf/extracted_maf/kirc_topdriver105genes.maf")
+kirc_maf=read_tsv("kaz_maf/extracted_maf/kirc_topdriver105genes.maf")
+#kirp_maf=muse_mutect_every_path("kirp")%>>%mutate(cancer_type="KIRP")
+#write_df(kirp_maf,"kaz_maf/extracted_maf/kirp_topdriver105genes.maf")
+kirp_maf=read_tsv("kaz_maf/extracted_maf/kirp_topdriver105genes.maf")
+#kich_maf=muse_mutect_every_path("kich")%>>%mutate(cancer_type="KICH")
+#write_df(kich_maf,"kaz_maf/extracted_maf/kich_topdriver105genes.maf")
+kich_maf=read_tsv("kaz_maf/extracted_maf/kich_topdriver105genes.maf")
+kidney_maf=full_join(kirc_maf,kirp_maf)%>>%full_join(kich_maf) %>>%
+  left_join(read_tsv(("maf_norm/kidney/depth/gender_file.tsv")))%>>%
+  filter(!is.na(gender))%>>%
+  dplyr::select(-Tumor_Sample_Barcode,-gender)
+
+coad_maf=muse_mutect_every_path("coad")%>>%mutate(cancer_type="COAD")
+write_df(coad_maf,"kaz_maf/extracted_maf/coad_topdriver105genes.maf")
+coad_maf=read_tsv("kaz_maf/extracted_maf/coad_topdriver105genes.maf")
+read_maf=muse_mutect_every_path("read")%>>%mutate(cancer_type="READ")
+write_df(read_maf,"kaz_maf/extracted_maf/read_topdriver105genes.maf")
+read_maf=read_tsv("kaz_maf/extracted_maf/read_topdriver105genes.maf")
+colorectal_maf=full_join(coad_maf,read_maf)%>>%
+  left_join(read_tsv(("maf_norm/colorectal/depth/gender_file.tsv")))%>>%
   filter(!is.na(gender))%>>%
   dplyr::select(-Tumor_Sample_Barcode,-gender)
 
@@ -522,12 +563,6 @@ variatn_lung %>>%
 
 
 #######################like GWAS plot###############################
-strip_maf = function(infile) {
-  read_tsv(infile, comment='#', col_types=.cols) %>>%
-    classify_consequence() %>>%
-    filter(Consequence != "intron_variant")
-}
-
 if(0){
 maf_1kg_all=maf_list %>>%
   mutate(maf=purrr::map(path,~strip_maf(.))) %>>%
@@ -551,6 +586,11 @@ extract_norm_maf_all=function(.bp){
   .cols = .colnames %>>%
   {setNames(c('c','c','d','d','c','c','c','c','c'), .)} %>>%
   {do.call(readr::cols_only, as.list(.))}
+  strip_maf = function(infile) {
+    read_tsv(infile, comment='#', col_types=.cols) %>>%
+      classify_consequence() %>>%
+      filter(Consequence != "intron_variant")
+  }
   
   #.bp is bodypart of it cancer
   maf=read_tsv(paste('maf_norm/',.bp,'/depth/gender_file.tsv',sep="")) %>>%
@@ -579,14 +619,26 @@ breast_norm_maf_all=read_tsv("./maf_norm/united_maf/breast_all_site.maf",col_typ
 #write_df(brain_norm_maf_all,"./maf_norm/united_maf/brain_all_site.maf")
 brain_norm_maf_all=read_tsv("./maf_norm/united_maf/brain_all_site.maf",col_types = "cccciiccccc")
 
-lung_coverage  =read_tsv("/Volumes/areca42TB/tcga/maf_norm/lung/depth/coverage_all_data_exist_patient.tsv",
+#kidney_norm_maf_all=extract_norm_maf_all("kidney")
+#write_df(kidney_norm_maf_all,"./maf_norm/united_maf/kidney_all_site.maf")
+kidney_norm_maf_all=read_tsv("./maf_norm/united_maf/kidney_all_site.maf",col_types = "cccciiccccc")
+
+#colorectal_norm_maf_all=extract_norm_maf_all("colorectal")
+#write_df(colorectal_norm_maf_all,"./maf_norm/united_maf/colorectal_all_site.maf")
+colorectal_norm_maf_all=read_tsv("./maf_norm/united_maf/colorectal_all_site.maf",col_types = "cccciiccccc")
+
+lung_coverage      =read_tsv("/Volumes/areca42TB/tcga/maf_norm/lung/depth/coverage_all_data_exist_patient.tsv",
                         col_names = c("chr","start","an_lung"),col_types = "cdd")
-brain_coverage =read_tsv("/Volumes/areca42TB/tcga/maf_norm/brain/depth/coverage_all_data_exist_patient.tsv",
+brain_coverage     =read_tsv("/Volumes/areca42TB/tcga/maf_norm/brain/depth/coverage_all_data_exist_patient.tsv",
                         col_names = c("chr","start","an_brain"),col_types = "cdd")
-breast_coverage=read_tsv("/Volumes/areca42TB/tcga/maf_norm/breast/depth/coverage_all_data_exist_patient.tsv",
+breast_coverage    =read_tsv("/Volumes/areca42TB/tcga/maf_norm/breast/depth/coverage_all_data_exist_patient.tsv",
                          col_names = c("chr","start","an_breast"),col_types = "cdd")
+kidney_coverage    =rad_tsv("/Volumes/areca42TB/tcga/maf_norm/kidney/depth/coverage_all_data_exist_patient.tsv",
+                        col_names = c("chr","start","an_breast"),col_types = "cdd")
+colorectal_coverage=rad_tsv("/Volumes/areca42TB/tcga/maf_norm/colorectal/depth/coverage_all_data_exist_patient.tsv",
+                        col_names = c("chr","start","an_breast"),col_types = "cdd")
 cancer_coverage=full_join(lung_coverage,brain_coverage) %>>%
-  full_join(breast_coverage) %>>%
+  full_join(breast_coverage) %>>%full_join(kidney_coverage) %>>%
   mutate(an_lung  =ifelse(is.na(an_lung  ),0,an_lung  ),
          an_brain =ifelse(is.na(an_brain ),0,an_brain ),
          an_breast=ifelse(is.na(an_breast),0,an_breast)) %>>%
@@ -629,8 +681,24 @@ tally_breast_all = breast_norm_maf_all %>>%
   summarise(ac_breast=n()) %>>%
   left_join(breast_norm_maf_all %>>% group_by(patient_id,chr,start,alt) %>>%mutate(variant_num=n()) %>>%
               filter(variant_num==2) %>>%group_by(chr,start,end,alt) %>>%summarise(homo_breast=n()))
+tally_kidney_all = breast_kidney_maf_all %>>%
+  filter(!str_detect(Consequence,"intron_variant")) %>>%
+  filter(!mutype=="flank") %>>%
+  filter(!str_detect(Consequence, "frame")) %>>%
+  group_by(gene_symbol,ref,alt,chr,start,end,mutype,PolyPhen,Consequence) %>>%
+  summarise(ac_breast=n()) %>>%
+  left_join(breast_norm_maf_all %>>% group_by(patient_id,chr,start,alt) %>>%mutate(variant_num=n()) %>>%
+              filter(variant_num==2) %>>%group_by(chr,start,end,alt) %>>%summarise(homo_breast=n()))
+tally_colorectal_all = breast_colorectal_maf_all %>>%
+  filter(!str_detect(Consequence,"intron_variant")) %>>%
+  filter(!mutype=="flank") %>>%
+  filter(!str_detect(Consequence, "frame")) %>>%
+  group_by(gene_symbol,ref,alt,chr,start,end,mutype,PolyPhen,Consequence) %>>%
+  summarise(ac_breast=n()) %>>%
+  left_join(breast_norm_maf_all %>>% group_by(patient_id,chr,start,alt) %>>%mutate(variant_num=n()) %>>%
+              filter(variant_num==2) %>>%group_by(chr,start,end,alt) %>>%summarise(homo_breast=n()))
 tally_all=full_join(tally_lung_all,tally_brain_all) %>>%
-  full_join(tally_breast_all) %>>%
+  full_join(tally_breast_all) %>>%full_join(tally_kidney_all) %>>%full_join(tally_colorectal_all) %>>%
   mutate(ac_lung  =as.double(ifelse(is.na(ac_lung  ),0,ac_lung)  ),
          ac_brain =as.double(ifelse(is.na(ac_brain ),0,ac_brain) ),
          ac_breast=as.double(ifelse(is.na(ac_breast),0,ac_breast))) %>>%
@@ -756,3 +824,9 @@ all_variant_homo_fisher = full_join(tally_1kg_all,tally_all) %>>%
   dplyr::select(gene_symbol,chr,start,ref,alt,mutype,PolyPhen,homo_cancer,homo_1kg,uk_althomo,
                 p_value_1kg,p_value_uk10k,AF_cancer,AF_1kg,AF_uk10k,AF_exac,hetero_cancer,
                 HWhet_cancer,HWE_p_cancer,hetero_1kg,HWhet_1kg,HWE_p_1kg,hetero_uk10k,HWhet_uk10k,HWE_p_uk10k)
+
+all_variant_homo_fisher %>>%
+  filter(mutype=="silent"|mutype=="missense") %>>%
+  ggplot()+
+  geom_histogram(aes(x=p_value_1kg))+
+  facet_grid(~ mutype)

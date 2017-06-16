@@ -67,7 +67,7 @@ driver_genes=read_tsv("~/git/driver_genes/driver_genes.tsv")%>>%
 cna=read_tsv('annotate_ascat.tsv.gz') 
 ascat_focal=read_tsv('error_of_annotate_ascat.txt') %>>%
   mutate(focal_ascat="no")
-maf_focal=read_tsv('../../../maf_norm/breast/list_of_perfect_maf.tsv') %>>%
+maf_focal=read_tsv('../../../maf_norm/breast/depth/list_of_perfect_maf.tsv') %>>%
   left_join(ascat_focal) %>>%
   mutate(focal=ifelse(is.na(focal_ascat),focal,"no")) %>>%dplyr::select(-focal_ascat)
 cna = cna %>>%
@@ -171,9 +171,9 @@ pa=cna %>>%
   left_join(plot_posi) %>>%
   mutate(start_rate=start_rate + gposi,end_rate=end_rate + gposi) %>>%
   group_by(patient_id,groupe) %>>%
-  nest(.key=CNA) %>>%#head(100)%>>%
+  nest(.key=CNA) %>>%head(5)%>>%
   by_row(.to='plot',plot)
-ggsave("test.pdf",gridExtra::marrangeGrob(pa$plot,nrow = 10,ncol = 1,top = NULL),width = 8,height = 12)
+ggsave("by_patient.pdf",gridExtra::marrangeGrob(pa$plot,nrow = 10,ncol = 1,top = NULL),width = 8,height = 12)
 
 #############test polts#######################
 if(1){

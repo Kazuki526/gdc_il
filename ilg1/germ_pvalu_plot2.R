@@ -4,6 +4,7 @@ library(dplyr)
 library(pipeR)
 library(stringr)
 library(ggplot2)
+library(ggsignif)
 library(gridExtra)
 library(readr)
 library(readxl)
@@ -66,6 +67,7 @@ lung_norm_maf_all=read_tsv("./maf_norm/united_maf/lung_all_site.maf",col_types =
 breast_norm_maf_all=read_tsv("./maf_norm/united_maf/breast_all_site.maf",col_types = "cccciiccccc")
 brain_norm_maf_all=read_tsv("./maf_norm/united_maf/brain_all_site.maf",col_types = "cccciiccccc")
 kidney_norm_maf_all=read_tsv("./maf_norm/united_maf/kidney_all_site.maf",col_types = "cccciiccccc")
+colorectal_norm_maf_all=read_tsv("./maf_norm/united_maf/kidney_colorectal_site.maf",col_types = "cccciiccccc")
 
 ###tally  maf###
 tally_lung_all = lung_norm_maf_all %>>%
@@ -92,24 +94,36 @@ tally_breast_all = breast_norm_maf_all %>>%
   summarise(ac_breast=n()) %>>%
   left_join(breast_norm_maf_all %>>% group_by(patient_id,chr,start,alt) %>>%mutate(variant_num=n()) %>>%
   filter(variant_num==2) %>>%group_by(chr,start,end,alt) %>>%summarise(homo_breast=n()))
-tally_kidney_all = breast_kidney_maf_all %>>%
+tally_kidney_all = kidney_norm_maf_all %>>%
   filter(!str_detect(Consequence,"intron_variant")) %>>%
   filter(!mutype=="flank") %>>%
   filter(!str_detect(Consequence, "frame")) %>>%
   group_by(gene_symbol,ref,alt,chr,start,end,mutype,PolyPhen,Consequence) %>>%
-  summarise(ac_breast=n()) %>>%
-  left_join(breast_norm_maf_all %>>% group_by(patient_id,chr,start,alt) %>>%mutate(variant_num=n()) %>>%
-              filter(variant_num==2) %>>%group_by(chr,start,end,alt) %>>%summarise(homo_breast=n()))
-tally_all=full_join(tally_lung_all,tally_brain_all) %>>%
-  full_join(tally_breast_all) %>>%full_join(tally_kidney_all) %>>%
+  summarise(ac_kidney=n()) %>>%
+  left_join(kidney_norm_maf_all %>>% group_by(patient_id,chr,start,alt) %>>%mutate(variant_num=n()) %>>%
+              filter(variant_num==2) %>>%group_by(chr,start,end,alt) %>>%summarise(homo_kidney=n()))
+tally_colorectal_all = colorectal_norm_maf_all %>>%
+  filter(!str_detect(Consequence,"intron_variant")) %>>%
+  filter(!mutype=="flank") %>>%
+  filter(!str_detect(Consequence, "frame")) %>>%
+  group_by(gene_symbol,ref,alt,chr,start,end,mutype,PolyPhen,Consequence) %>>%
+  summarise(ac_colorectal=n()) %>>%
+  left_join(colorectal_norm_maf_all %>>% group_by(patient_id,chr,start,alt) %>>%mutate(variant_num=n()) %>>%
+              filter(variant_num==2) %>>%group_by(chr,start,end,alt) %>>%summarise(homo_colorectal=n()))
+tally_all=rbind(tally_lung_all,tally_brain_all) %>>%
+  rbind(tally_breast_all) %>>%rbind(tally_kidney_all) %>>%rbind(tally_colorectal_all) %>>%
   mutate(ac_lung  =as.double(ifelse(is.na(ac_lung  ),0,ac_lung)  ),
          ac_brain =as.double(ifelse(is.na(ac_brain ),0,ac_brain) ),
-         ac_breast=as.double(ifelse(is.na(ac_breast),0,ac_breast))) %>>%
+         ac_breast=as.double(ifelse(is.na(ac_breast),0,ac_breast)),
+         ac_kidney=as.double(ifelse(is.na(ac_kidney),0,ac_kidney)),
+         ac_colorectal=as.double(ifelse(is.na(ac_colorectal),0,ac_colorectal)) ) %>>%
   mutate(homo_lung  =as.double(ifelse(is.na(homo_lung  ),0,homo_lung)  ),
          homo_brain =as.double(ifelse(is.na(homo_brain ),0,homo_brain) ),
-  homo_breast=as.double(ifelse(is.na(homo_breast),0,homo_breast))) %>>%
-  mutate(ac_cancer= ac_lung + ac_brain + ac_breast ) %>>%
-  mutate(homo_cancer= homo_lung + homo_brain + homo_breast)
+         homo_breast=as.double(ifelse(is.na(homo_breast),0,homo_breast)),
+         homo_kidney=as.double(ifelse(is.na(homo_kidney),0,homo_kidney)),
+         homo_colorectal=as.double(ifelse(is.na(homo_colorectal),0,homo_colorectal)) ) %>>%
+  mutate(ac_cancer= ac_lung + ac_brain + ac_breast + ac_kidney + ac_colorectal) %>>%
+  mutate(homo_cancer= homo_lung + homo_brain + homo_breast + homo_kidney + homo_colorectal)
 
 ###coverage file###
 lung_coverage  =read_tsv("/Volumes/areca42TB/tcga/maf_norm/lung/depth/coverage_all_data_exist_patient.tsv",
@@ -118,20 +132,24 @@ brain_coverage =read_tsv("/Volumes/areca42TB/tcga/maf_norm/brain/depth/coverage_
                          col_names = c("chr","start","an_brain"),col_types = "cdd")
 breast_coverage=read_tsv("/Volumes/areca42TB/tcga/maf_norm/breast/depth/coverage_all_data_exist_patient.tsv",
                          col_names = c("chr","start","an_breast"),col_types = "cdd")
-kideny_coverage=read_tsv("/Volumes/areca42TB/tcga/maf_norm/kidney/depth/coverage_all_data_exist_patient.tsv",
-                         col_names = c("chr","start","an_breast"),col_types = "cdd")
-cancer_coverage=full_join(lung_coverage,brain_coverage) %>>%
-  full_join(breast_coverage) %>>%full_join(kidney_coverage) %>>%
+kidney_coverage=read_tsv("/Volumes/areca42TB/tcga/maf_norm/kidney/depth/coverage_all_data_exist_patient.tsv",
+                         col_names = c("chr","start","an_kidney"),col_types = "cdd")
+colorectal_coverage=read_tsv("/Volumes/areca42TB/tcga/maf_norm/colorectal/depth/coverage_all_data_exist_patient.tsv",
+                             col_names = c("chr","start","an_colorectal"),col_types = "cdd")
+cancer_coverage=rbind(lung_coverage,brain_coverage) %>>%
+  rbind(breast_coverage) %>>%rbind(kidney_coverage) %>>%rbind(colorectal_coverage) %>>%
   mutate(an_lung  =ifelse(is.na(an_lung  ),0,an_lung  ),
          an_brain =ifelse(is.na(an_brain ),0,an_brain ),
-         an_breast=ifelse(is.na(an_breast),0,an_breast)) %>>%
-  mutate(an_cancer=an_lung + an_brain + an_breast) %>>%
+         an_breast=ifelse(is.na(an_breast),0,an_breast),
+         an_kidney=ifelse(is.na(an_kidney),0,an_kidney),
+         an_colorectal=ifelse(is.na(an_colorectal),0,an_colorectal) ) %>>%
+  mutate(an_cancer=an_lung + an_brain + an_breast + an_kidney + an_colorectal) %>>%
   dplyr::select(chr,start,an_cancer)
 
 ### somatic mutation####
 lusc_maf=read_tsv("kaz_maf/extracted_maf/lusc_topdriver105genes.maf")
 luad_maf=read_tsv("kaz_maf/extracted_maf/luad_topdriver105genes.maf")
-lung_maf=full_join(lusc_maf,luad_maf) %>>%
+lung_maf=rbind(lusc_maf,luad_maf) %>>%
   left_join(read_tsv("maf_norm/lung/depth/gender_file.tsv")) %>>%
   filter(!is.na(gender))%>>%
   dplyr::select(-Tumor_Sample_Barcode,-gender) %>>%
@@ -143,28 +161,57 @@ breast_maf=read_tsv("kaz_maf/extracted_maf/brca_topdriver105genes.maf") %>>%
   dplyr::select(-Tumor_Sample_Barcode,-gender)
 lgg_maf=read_tsv("kaz_maf/extracted_maf/lgg_topdriver105genes.maf")
 gbm_maf=read_tsv("kaz_maf/extracted_maf/gbm_topdriver105genes.maf")
-brain_maf=full_join(lgg_maf,gbm_maf) %>>%
+brain_maf=rbind(lgg_maf,gbm_maf) %>>%
   left_join(read_tsv("maf_norm/brain/depth/gender_file.tsv")) %>>%
   filter(!is.na(gender))%>>%
   dplyr::select(-Tumor_Sample_Barcode,-gender) %>>%
   mutate(bodypart="brain")
-#kidneyまだやってない！！ 
+kirc_maf=read_tsv("kaz_maf/extracted_maf/kirc_topdriver105genes.maf")
+kirp_maf=read_tsv("kaz_maf/extracted_maf/kirp_topdriver105genes.maf")
+kich_maf=read_tsv("kaz_maf/extracted_maf/kich_topdriver105genes.maf")
+kidney_maf=rbind(kirc_maf,kirp_maf)%>>%rbind(kich_maf) %>>%
+  left_join(read_tsv(("maf_norm/kidney/depth/gender_file.tsv")))%>>%
+  filter(!is.na(gender))%>>%
+  dplyr::select(-Tumor_Sample_Barcode,-gender)
+coad_maf=read_tsv("kaz_maf/extracted_maf/coad_topdriver105genes.maf")
+read_maf=read_tsv("kaz_maf/extracted_maf/read_topdriver105genes.maf")
+colorectal_maf=rbind(coad_maf,read_maf)%>>%
+  left_join(read_tsv(("maf_norm/colorectal/depth/gender_file.tsv")))%>>%
+  filter(!is.na(gender))%>>%
+  dplyr::select(-Tumor_Sample_Barcode,-gender)
 
-maf_somatic=full_join(lung_maf,breast_maf) %>>%full_join(brain_maf)
 
+maf_somatic=rbind(lung_maf,breast_maf) %>>%rbind(brain_maf) %>>%
+  rbind(kidney_maf) %>>%rbind(colorectal_maf)
+
+rm(lusc_maf,luad_maf,lung_maf,breast_maf,lgg_maf,gbm_maf,brain_maf,kirc_maf,
+   kirp_maf,kich_maf,kidney_maf,coad_maf,read_maf,colorectal_maf)
 ### CNA ###
 lung_cna=read_tsv("./CNA/lung/cel/annotate_ascat.tsv.gz")
 breast_cna=read_tsv("./CNA/breast/cel/annotate_ascat.tsv.gz")
 brain_cna=read_tsv("./CNA/brain/cel/annotate_ascat.tsv.gz")
 kidney_cna=read_tsv("./CNA/kidney/cel/annotate_ascat.tsv.gz")
+colorectal_cna=read_tsv("./CNA/colorectal/cel/annotate_ascat.tsv.gz")
 
 ### gender&age ###
-breast_age=read_tsv("/Volumes/areca42TB2/gdc/varscan/breast/gender_age.tsv")
-lung_age  =read_tsv("/Volumes/areca42TB2/gdc/varscan/lung/gender_age.tsv")
-brain_age =read_tsv("/Volumes/areca42TB2/gdc/varscan/brain/gender_age.tsv")
+breast_age    =read_tsv("/Volumes/areca42TB2/gdc/varscan/breast/gender_age.tsv")
+lung_age      =read_tsv("/Volumes/areca42TB2/gdc/varscan/lung/gender_age.tsv")
+brain_age     =read_tsv("/Volumes/areca42TB2/gdc/varscan/brain/gender_age.tsv")
+kidney_age    =read_tsv("/Volumes/areca42TB2/gdc/varscan/kidney/gender_age.tsv")
+colorectal_age=read_tsv("/Volumes/areca42TB2/gdc/varscan/colorectal/gender_age.tsv")
+colorectal_age=read_tsv("/Volumes/areca42TB/tcga/maf_norm/colorectal/depth/gender_file.tsv") %>>%
+  left_join(patient_all_data%>>%dplyr::select(patient_id,age))
 
-all_age = full_join(breast_age,lung_age) %>>%full_join(brain_age) %>>%
-  mutate(age=ceiling(age/365.25))
+all_age = rbind(breast_age,lung_age) %>>%rbind(brain_age) %>>%
+  rbind(kidney_age) %>>%rbind(colorectal_age) %>>%
+  mutate(age=round(age/365.25*10)/10)
+rm(breast_age,lung_age,brain_age,kidney_age,colorectal_age)
+
+###all patient data###
+patient_all_data = read_tsv("~/git/all_patient/all_patient_response.tsv") %>>%
+  rename(patient_id=submitter_id, race=demographic_race, gender=demographic_gender,
+         age= diagnoses_0_age_at_diagnosis, days_to_death=diagnoses_0_days_to_death,
+         smoked_year=exposures_0_years_smoked)
 ###1kg###
 sample_num_1kg=5008
 sample_num_X_1kg=sample_num_1kg - 1233
@@ -179,9 +226,9 @@ tally_1kg_all= maf_1kg_all %>>%
   summarise(ac_1kg=n()) %>>%
   left_join(maf_1kg_all %>>% group_by(sample,chr,start,alt) %>>%mutate(variant_num=n()) %>>%
   filter(variant_num==2) %>>%group_by(chr,start,end,alt) %>>%summarise(homo_1kg=n())) %>>%
-full_join(vcf_1kg_ac0)
-tally_1kg_all=tally_1kg_all %>>%full_join(vcf_1kg_ac0)
+  full_join(vcf_1kg_ac0)
 
+rm(vcf_1kg_ac0,maf_1kg_all)
 ####UK 10K ###
 vcf_10k=read_tsv("/Volumes/areca42TB/ega/file/all_sample_topdriver_region_likevcf.tsv.gz",col_types = "cdccdddd")
 
@@ -316,197 +363,6 @@ all_variant %>>%
   scale_x_log10()
 #####おそらく目立った差はなさそう、、、
 
-#########################################################################################
-################ germline mutation はがん化に寄与する？##########
-
-#######とりあえずmissenseのみでゴリゴリ行ってみる
-
-#### AF 5~95%のsite抽出 ####
-AF_more5 = all_variant %>>%
-  filter(AF_cancer > 0.05, AF_cancer < 0.95) %>>%
-  filter(mutype=="missense") %>>%
-  filter(an_cancer > 5000)
-
-#もいちどファイルを読む
-maf_norm_breast=read_tsv("maf_norm/united_maf/breast_nonsilent.maf")
-maf_norm_lung=read_tsv("maf_norm/united_maf/lung_nonsilent.maf")
-maf_norm_brain=read_tsv("maf_norm/united_maf/brain_nonsilent.maf")
-maf_norm_kidney=read_tsv("maf_norm/united_maf/kidney_nonsilent.maf")
-
-
-#AF 5~95%のmutationを持つpatient抽出
-maf_AF_more5 =full_join(maf_norm_breast,maf_norm_lung) %>>%
-  full_join(maf_norm_brain) %>>%
-  left_join(AF_more5 %>>%dplyr::select(gene_symbol,chr,start,alt)%>>%mutate(focal="ok")) %>>%
-  filter(focal=="ok") %>>% dplyr::select(-focal) %>>%
-  group_by(gene_symbol,chr,start,patient_id,ref,alt,PolyPhen) %>>%
-  summarise(genotype=ifelse(n()==2,"alt_homo","hetero"))
-
-#### somatic mutationのpolyphen score高い順に上から２つ抽出（2つあればhomo壊れ壊れ？）
-##(truncating =2, splice=1.5 と点数付けした)
-maf_somatic_for_somatic_test=maf_somatic %>>%
-  dplyr::select(gene_symbol,patient_id,cancer_type,mutype,PolyPhen) %>>%
-  mutate(mutation_score=ifelse(mutype=="truncating",2,
-                               ifelse(mutype=="splice",1.5,str_extract(PolyPhen,"\\d.\\d+"))))%>>%
-  mutate(mutation_score=as.double(ifelse(is.na(mutation_score),str_extract(PolyPhen,"\\d"),
-                                         mutation_score)))%>>%
-  group_by(gene_symbol,patient_id)%>>%
-  mutate(rank=row_number(desc(mutation_score))) %>>%
-  filter(rank <3)%>>%
-  rename(mutype_s=mutype) %>>%
-  dplyr::select(gene_symbol,patient_id,mutype_s,mutation_score)
-
-####つぎの作図用
-pnum=full_join(lung_cna,breast_cna) %>>%
-  full_join(brain_cna) %>>%
-  dplyr::select(gene_symbol,patient_id) %>>%
-  left_join(driver_genes%>>%dplyr::select(gene,role),by=c("gene_symbol"="gene")) %>>%
-  filter(role=="TSG") %>>%
-  left_join(AF_more5) %>>%
-  filter(!is.na(ref)) %>>%
-  dplyr::select(gene_symbol,patient_id,chr,start,ref,alt,AF_cancer) %>>%
-  left_join(maf_AF_more5) %>>%
-  mutate(site=as.character(paste(gene_symbol,paste0("chr",chr),start,
-                                 paste0(ref,"to",alt),paste0("AF=",floor(AF_cancer*100)),sep=":"))) %>>%
-  mutate(genotype=ifelse(is.na(genotype),"ref_homo",genotype)) %>>%
-  group_by(site,genotype)%>>%tally()
-
-#### refhomo,hetero,althomoにわけてそれぞれのsomatic mutationの起こり具合の図作成!!!
-## (filter(mutation_score==max(mutation_score)) %>>%)を入れないとsomatic mutatin 2個もdouble hit
-## 入れるとmafからのmutationは二箇所起こっていてもone-hitと考える
-## somatic mutationのカウントするpolyphenをいじれる
-full_join(lung_cna,breast_cna) %>>%
-  full_join(brain_cna) %>>%
-  dplyr::select(gene_symbol,patient_id,nmajor,nminor) %>>%
-  left_join(driver_genes%>>%dplyr::select(gene,role),by=c("gene_symbol"="gene")) %>>%
-  filter(role=="TSG") %>>%
-  left_join(AF_more5) %>>%
-  filter(!is.na(ref)) %>>%
-  dplyr::select(gene_symbol,patient_id,nmajor,nminor,chr,start,ref,alt,AF_cancer,AF_1kg,AF_uk10k,AF_exac) %>>%
-  left_join(maf_AF_more5) %>>%
-  mutate(genotype=ifelse(is.na(genotype),"ref_homo",genotype)) %>>%
-  left_join(maf_somatic_for_somatic_test %>>%filter(mutation_score>0.5) %>>%
-## 360行目のmutation_score>◯◯をいじるとsomatic mutationのカウントするpolyphenをいじれる
-              group_by(gene_symbol,patient_id)%>>%
-#              filter(mutation_score==max(mutation_score)) %>>%
-## これ↑を入れないとsomatic mutatin 2個もdouble hit、入れるとmafからのmutationは二箇所起こっていてもone-hitと考える
-              summarise(snp_num=n())) %>>%
-  mutate(cna_del=ifelse(nminor==0,ifelse(nmajor==0,"homodel","del"),"no"),
-         snp_num=ifelse(is.na(snp_num),0,snp_num)) %>>%
-  mutate(somatic_mutation=ifelse(cna_del=="homodel"|(cna_del=="del" & snp_num >=1)|snp_num==2,"double_hit",
-                                 ifelse(cna_del=="del"|snp_num==1,"one_hit","none"))) %>>%
-  mutate(somatic_mutation=ifelse(is.na(somatic_mutation),"none",somatic_mutation)) %>>%
-  mutate(site=as.character(paste(gene_symbol,paste0("chr",chr),start,
-                                 paste0(ref,"to",alt),paste0("AF=",floor(AF_cancer*100)),sep=":"))) %>>%
-  mutate(genotype_order=ifelse(genotype=="ref_homo",1,ifelse(genotype=="hetero",2,3))) %>>%#図の順番用
-  mutate(somatic_order=ifelse(somatic_mutation=="double_hit",1,
-                              ifelse(somatic_mutation=="one_hit",2,3))) %>>%#図の順番用
-  ggplot()+
-  geom_bar(aes(x=reorder(genotype,genotype_order),fill=reorder(as.factor(somatic_mutation),somatic_order)),
-           position = "fill")+
-  geom_text(data =pnum,aes(x=genotype,y=0.1,label=n),size=3,position="stack")+
-  facet_wrap(~ site,ncol=5)+
-  theme(strip.text = element_text(size=6),axis.text.x = element_text(angle = -45, hjust = 0))
-
-##############################
-#### AF<5% の site ###
-#### AF<5のsiteを持つpatientを抽出
-maf_AF_less5 =full_join(maf_norm_breast,maf_norm_lung) %>>%
-  full_join(maf_norm_brain) %>>%
-  filter(gene_symbol!="KMT2C") %>>%
-  left_join(errored_variant %>>%dplyr::select(chr,start,alt)%>>%mutate(error="error")) %>>%
-  filter(is.na(error)) %>>% #HWEでエラーと考えられるsiteを除く
-  left_join(AF_more5 %>>%dplyr::select(gene_symbol,chr,start,alt)%>>%mutate(focal="more5")) %>>%
-  filter(is.na(focal)) %>>% dplyr::select(-focal,-error) %>>%
-  group_by(gene_symbol,chr,start,patient_id,ref,alt,mutype,PolyPhen) %>>%
-  summarise(genotype=ifelse(n()==2,"alt_homo","hetero")) %>>%
-  left_join(all_variant %>>%select(gene_symbol,chr,start,ref,alt,AF_cancer)) %>>%
-  filter(AF_cancer<0.05|is.na(AF_cancer)) %>>%
-  ungroup() %>>%
-  filter(mutype!="splice") %>>%
-  mutate(mutation_score=as.numeric(ifelse(mutype=="truncating",2,
-                                          ifelse(mutype=="inframe_indel",1.5,str_extract(PolyPhen,"\\d.\\d+")))))%>>%
-  mutate(mutation_score=as.double(ifelse(is.na(mutation_score),str_extract(PolyPhen,"\\d"),
-                                         mutation_score))) %>>%
-  mutate(mutation_type=ifelse(mutype=="missense",str_extract(PolyPhen,"^\\w+"),mutype)) %>>%
-  filter(!is.na(mutation_type)) %>>%filter(mutation_type!="unknown")
-
-ggplot(maf_AF_less5)+geom_histogram(aes(x=mutation_score))
-maf_AF_less10%>>%dplyr::count(mutype)
-####同じ遺伝子に２つ以上変異あるやつ確認！！ある。。。
-maf_AF_less10 %>>%group_by(gene_symbol,patient_id) %>>%filter(mutation_score==max(mutation_score)) %>>%
-  tally() %>>%filter(n>1) %>>%View
-
-#### 次の作図で使用
-## inframe_indelは復活可
-mutype_order = function(.data) {
-  dplyr::mutate(.data, mutation_type_order= dplyr::recode(mutation_type,
-                                                          "truncating"=1,
-                                                          "inframe_indel"=2,
-                                                          "damaging"=3,
-                                                          "probably_damaging"=3,
-                                                          "possibly_damaging"=4,
-                                                          "benign"=5,
-                                                          "none"=6))
-}
-cna_add_less5inf=function(.table){
-  .table %>>%
-    dplyr::select(gene_symbol,patient_id,nmajor,nminor,cancer_type) %>>%
-    group_by(gene_symbol,patient_id,cancer_type) %>>%
-    summarise_each(funs(min(.))) %>>%
-    left_join(driver_genes%>>%dplyr::select(gene,role),by=c("gene_symbol"="gene")) %>>%
-    filter(role=="TSG") %>>%
-    left_join(maf_AF_less5 %>>%group_by(gene_symbol,patient_id) %>>%
-    filter(mutation_type!="inframe_indel") %>>% #ここを除けばinframe_indelもはいる
-    filter(mutation_score==max(mutation_score))%>>%summarise_each(funs(.[1])))%>>%
-    mutate(mutation_type=ifelse(is.na(mutation_type),"none",mutation_type)) %>>%
-    mutate(mutation_type=ifelse(str_detect(mutation_type,"damaging"),"damaging",mutation_type))
-    #最後の行外せばpolyphenのprobably_damagingとpossibly_damagingをわけられる(通常damagingで一括)
-}
-
-##次の作図で各々のpatient number表示させるための準備
-pnum_all = full_join(lung_cna%>>%mutate(cancer_type="lung"),breast_cna%>>%mutate(cancer_type="breast")) %>>%
-  full_join(brain_cna%>>%mutate(cancer_type="brain")) %>>%
-  cna_add_less5inf()%>>%
-  group_by(gene_symbol,mutation_type) %>>%tally()
-pnum_breast =breast_cna%>>%mutate(cancer_type="breast") %>>%
-  cna_add_less5inf()%>>%group_by(gene_symbol,mutation_type) %>>%tally()
-pnum_lung   =lung_cna  %>>%mutate(cancer_type="lung") %>>%
-  cna_add_less5inf()%>>%group_by(gene_symbol,mutation_type) %>>%tally()
-pnum_brain  =brain_cna %>>%mutate(cancer_type="brain") %>>%
-  cna_add_less5inf()%>>%group_by(gene_symbol,mutation_type) %>>%tally()
-
-
-#### 各種類のmutationがあるかorどれもないか、わけてそれぞれのsomatic mutationの起こり具合の図作成!!!
-## (filter(mutation_score==max(mutation_score)) %>>%)を入れないとsomatic mutatin 2個もdouble hit
-## 入れるとmafからのmutationは二箇所起こっていてもone-hitと考える
-## somatic mutationのカウントするpolyphenをいじれる
-full_join(lung_cna%>>%mutate(cancer_type="lung"),breast_cna%>>%mutate(cancer_type="breast")) %>>%
-#  full_join(brain_cna%>>%mutate(cancer_type="brain")) %>>%
-  filter(cancer_type=="brain") %>>%  #ここを変えると部位ごとになる
-  cna_add_less5inf()%>>%
-  left_join(maf_somatic_for_somatic_test %>>%filter(mutation_score>0.95) %>>%
-## 360行目のmutation_score>◯◯をいじるとsomatic mutationのカウントするpolyphenをいじれる
-            group_by(gene_symbol,patient_id)%>>%
-#              filter(mutation_score==max(mutation_score)) %>>%
-## これ↑を入れないとsomatic mutatin 2個もdouble hit、入れるとmafからのmutationは二箇所起こっていてもone-hitと考える
-            summarise(snp_num=n())) %>>%
-  mutate(cna_del=ifelse(nminor==0,ifelse(nmajor==0,"homodel","del"),"no"),
-         snp_num=as.double(ifelse(is.na(snp_num),0,snp_num))) %>>%
-  mutate(somatic_mutation=ifelse(cna_del=="homodel"|(cna_del=="del" & snp_num >=1)|snp_num==2,"double_hit",
-                                 ifelse(cna_del=="del"|snp_num==1,"one_hit","none"))) %>>%
-  mutate(somatic_mutation=ifelse(is.na(somatic_mutation),"none",somatic_mutation)) %>>%
-  mutate(somatic_order=ifelse(somatic_mutation=="double_hit",1,ifelse(somatic_mutation=="one_hit",2,3))) %>>%
-  mutype_order() %>>% #mutation_typeの図での順番用
-  ggplot()+
-  geom_bar(aes(x=reorder(mutation_type,mutation_type_order),fill=reorder(as.factor(somatic_mutation),somatic_order)),
-           position = "fill")+
-  geom_text(data =pnum_brain,aes(x=mutation_type,y=0.1,label=n),size=3,position="stack")+ #ここのpnumも変える
-  facet_wrap(~ gene_symbol)+
-  theme(strip.text = element_text(size=6),axis.text.x = element_text(angle = -45, hjust = 0))
-
-
-
 ##########################################################################################################
 ##########################################################################################################
 #################################### dataを眺めるための図作成 ############################################
@@ -564,7 +420,8 @@ plot_gands_bygene=function(.row){
   .somatic_allnum=sum(.somatic_plot$n)
   .somatic_num = .somatic_plot %>>%
     filter(n>.somatic_allnum*0.2 & n>10)
-  .germ=full_join(maf_norm_brain,maf_norm_breast) %>>% full_join(maf_norm_lung) %>>%
+  .germ=rbind(maf_norm_brain,maf_norm_breast) %>>% rbind(maf_norm_lung) %>>%
+    rbind(maf_norm_kidney) %>>%rbind(maf_norm_colorectal) %>>%
     filter(gene_symbol==.gene) %>>%
     filter(mutype!="silent",mutype!="inframe_indel",mutype!="splice") %>>%
     group_by(gene_symbol,chr,start,ref,alt,PolyPhen,mutype,bodypart)%>>%tally()%>>%
@@ -610,3 +467,422 @@ plot_sandg=driver_genes %>>%dplyr::select(gene,role) %>>%
 
 ggsave("plot_bygenes_germ_somatic.pdf",gridExtra::marrangeGrob(plot_sandg$plot,nrow = 5,ncol = 1,top = NULL),
        width = 10,height = 20)
+
+
+#########################################################################################
+################ germline mutation はがん化に寄与する？##########
+
+#######とりあえずmissenseのみでゴリゴリ行ってみる
+
+#### AF 5~95%のsite抽出 ####
+AF_more5 = all_variant %>>%
+  filter(AF_cancer > 0.05, AF_cancer < 0.95) %>>%
+  filter(mutype=="missense") %>>%
+  filter(an_cancer > 5000)
+
+#ファイルを読む
+maf_norm_breast=read_tsv("maf_norm/united_maf/breast_nonsilent.maf")
+maf_norm_lung=read_tsv("maf_norm/united_maf/lung_nonsilent.maf")
+maf_norm_brain=read_tsv("maf_norm/united_maf/brain_nonsilent.maf")
+maf_norm_kidney=read_tsv("maf_norm/united_maf/kidney_nonsilent.maf")
+maf_norm_colorectal=read_tsv("maf_norm/united_maf/colorectal_nonsilent.maf")
+
+#AF 5~95%のmutationを持つpatient抽出
+maf_AF_more5 =rbind(maf_norm_breast,maf_norm_lung) %>>%
+  rbind(maf_norm_brain) %>>%rbind(maf_norm_kidney) %>>%
+  rbind(maf_norm_colorectal) %>>%
+  left_join(AF_more5 %>>%dplyr::select(gene_symbol,chr,start,alt)%>>%mutate(focal="ok")) %>>%
+  filter(focal=="ok") %>>% dplyr::select(-focal) %>>%
+  group_by(gene_symbol,chr,start,patient_id,ref,alt,PolyPhen) %>>%
+  summarise(genotype=ifelse(n()==2,"alt_homo","hetero"))
+
+#### somatic mutationのpolyphen score高い順に上から２つ抽出（2つあればhomo壊れ壊れ？）
+##(truncating =2, splice=1.5 と点数付けした)
+maf_somatic_for_somatic_test=maf_somatic %>>%
+  dplyr::select(gene_symbol,patient_id,body_part,mutype,PolyPhen) %>>%
+  mutate(mutation_score=ifelse(mutype=="truncating",2,
+                               ifelse(mutype=="splice",1.5,str_extract(PolyPhen,"\\d.\\d+"))))%>>%
+  mutate(mutation_score=as.double(ifelse(is.na(mutation_score),str_extract(PolyPhen,"\\d"),
+                                         mutation_score)))%>>%
+  group_by(gene_symbol,patient_id)%>>%
+  mutate(rank=row_number(desc(mutation_score))) %>>%
+  filter(rank <3)%>>%
+  rename(mutype_s=mutype) %>>%
+  dplyr::select(gene_symbol,patient_id,mutype_s,mutation_score)
+
+####つぎの作図用
+pnum=rbind(lung_cna,breast_cna) %>>%
+  rbind(brain_cna) %>>% rbind(kidney_cna) %>>%
+  rbind(colorectal_cna) %>>%
+  dplyr::select(gene_symbol,patient_id) %>>%
+  left_join(driver_genes%>>%dplyr::select(gene,role),by=c("gene_symbol"="gene")) %>>%
+  filter(role=="TSG") %>>%
+  left_join(AF_more5) %>>%
+  filter(!is.na(ref)) %>>%
+  dplyr::select(gene_symbol,patient_id,chr,start,ref,alt,AF_cancer) %>>%
+  left_join(maf_AF_more5) %>>%
+  mutate(site=as.character(paste(gene_symbol,paste0("chr",chr),start,
+                                 paste0(ref,"to",alt),paste0("AF=",floor(AF_cancer*100)),sep=":"))) %>>%
+  mutate(genotype=ifelse(is.na(genotype),"ref_homo",genotype)) %>>%
+  group_by(site,genotype)%>>%tally()
+
+#### refhomo,hetero,althomoにわけてそれぞれのsomatic mutationの起こり具合の図作成!!!
+## (filter(mutation_score==max(mutation_score)) %>>%)を入れないとsomatic mutatin 2個もdouble hit
+## 入れるとmafからのmutationは二箇所起こっていてもone-hitと考える
+## somatic mutationのカウントするpolyphenをいじれる
+rbind(lung_cna,breast_cna) %>>%
+  rbind(brain_cna) %>>%rbind(kidney_cna) %>>%rbind(colorectal_cna) %>>%
+  dplyr::select(gene_symbol,patient_id,nmajor,nminor) %>>%
+  left_join(driver_genes%>>%dplyr::select(gene,role),by=c("gene_symbol"="gene")) %>>%
+  filter(role=="TSG") %>>%
+  left_join(AF_more5) %>>%
+  filter(!is.na(ref)) %>>%
+  dplyr::select(gene_symbol,patient_id,nmajor,nminor,chr,start,ref,alt,AF_cancer,AF_1kg,AF_uk10k,AF_exac) %>>%
+  left_join(maf_AF_more5) %>>%
+  mutate(genotype=ifelse(is.na(genotype),"ref_homo",genotype)) %>>%
+  left_join(maf_somatic_for_somatic_test %>>%filter(mutation_score>0.5) %>>%
+## 360行目のmutation_score>◯◯をいじるとsomatic mutationのカウントするpolyphenをいじれる
+              group_by(gene_symbol,patient_id)%>>%
+#              filter(mutation_score==max(mutation_score)) %>>%
+## これ↑を入れないとsomatic mutatin 2個もdouble hit、入れるとmafからのmutationは二箇所起こっていてもone-hitと考える
+              summarise(snp_num=n())) %>>%
+  mutate(cna_del=ifelse(nminor==0,ifelse(nmajor==0,"homodel","del"),"no"),
+         snp_num=ifelse(is.na(snp_num),0,snp_num)) %>>%
+  mutate(somatic_mutation=ifelse(cna_del=="homodel"|(cna_del=="del" & snp_num >=1)|snp_num==2,"double_hit",
+                                 ifelse(cna_del=="del"|snp_num==1,"one_hit","none"))) %>>%
+  mutate(somatic_mutation=ifelse(is.na(somatic_mutation),"none",somatic_mutation)) %>>%
+  mutate(site=as.character(paste(gene_symbol,paste0("chr",chr),start,
+                                 paste0(ref,"to",alt),paste0("AF=",floor(AF_cancer*100)),sep=":"))) %>>%
+  mutate(genotype_order=ifelse(genotype=="ref_homo",1,ifelse(genotype=="hetero",2,3))) %>>%#図の順番用
+  mutate(somatic_order=ifelse(somatic_mutation=="double_hit",1,
+                              ifelse(somatic_mutation=="one_hit",2,3))) %>>%#図の順番用
+  ggplot()+
+  geom_bar(aes(x=reorder(genotype,genotype_order),fill=reorder(as.factor(somatic_mutation),somatic_order)),
+           position = "fill")+
+  geom_text(data =pnum,aes(x=genotype,y=0.1,label=n),size=3,position="stack")+
+  facet_wrap(~ site,ncol=5)+
+  theme(strip.text = element_text(size=6),axis.text.x = element_text(angle = -45, hjust = 0))
+
+##############################
+#### AF<5% の site ###
+#### AF<5のsiteを持つpatientを抽出
+maf_AF_less5 =rbind(maf_norm_breast,maf_norm_lung) %>>%
+  rbind(maf_norm_brain) %>>%rbind(maf_norm_kidney) %>>%rbind(maf_norm_colorectal) %>>%
+  filter(gene_symbol!="KMT2C") %>>%
+  left_join(errored_variant %>>%dplyr::select(chr,start,alt)%>>%mutate(error="error")) %>>%
+  filter(is.na(error)) %>>% #HWEでエラーと考えられるsiteを除く
+  left_join(AF_more5 %>>%dplyr::select(gene_symbol,chr,start,alt)%>>%mutate(focal="more5")) %>>%
+  filter(is.na(focal)) %>>% dplyr::select(-focal,-error) %>>%
+  group_by(gene_symbol,chr,start,patient_id,ref,alt,mutype,PolyPhen) %>>%
+  summarise(genotype=ifelse(n()==2,"alt_homo","hetero")) %>>%
+  left_join(all_variant %>>%select(gene_symbol,chr,start,ref,alt,AF_cancer)) %>>%
+  filter(AF_cancer<0.05|is.na(AF_cancer)) %>>%
+  ungroup() %>>%
+  filter(mutype!="splice") %>>%
+  mutate(mutation_score=as.numeric(ifelse(mutype=="truncating",2,
+                                          ifelse(mutype=="inframe_indel",1.5,str_extract(PolyPhen,"\\d.\\d+")))))%>>%
+  mutate(mutation_score=as.double(ifelse(is.na(mutation_score),str_extract(PolyPhen,"\\d"),
+                                         mutation_score))) %>>%
+  mutate(mutation_type=ifelse(mutype=="missense",str_extract(PolyPhen,"^\\w+"),mutype)) %>>%
+  filter(!is.na(mutation_type)) %>>%filter(mutation_type!="unknown")
+
+ggplot(maf_AF_less5)+geom_histogram(aes(x=mutation_score))
+maf_AF_less5%>>%dplyr::count(mutype)
+####同じ遺伝子に２つ以上変異あるやつ確認！！ある。。。
+maf_AF_less5 %>>%group_by(gene_symbol,patient_id) %>>%filter(mutation_score==max(mutation_score)) %>>%
+  tally() %>>%filter(n>1) %>>%View
+
+#### 次の作図で使用
+## inframe_indelは復活可
+mutype_order = function(.data) {
+  dplyr::mutate(.data, mutation_type_order= dplyr::recode(mutation_type,
+                                                          "truncating"=1,
+                                                          "inframe_indel"=2,
+                                                          "damaging"=3,
+                                                          "probably_damaging"=3,
+                                                          "possibly_damaging"=4,
+                                                          "benign"=5,
+                                                          "none"=6))
+}
+cna_add_less5inf=function(.table){
+  .table %>>%
+    dplyr::select(gene_symbol,patient_id,nmajor,nminor,body_part) %>>%
+    group_by(gene_symbol,patient_id,body_part) %>>%
+    summarise_each(funs(min(.))) %>>%
+    left_join(driver_genes%>>%dplyr::select(gene,role),by=c("gene_symbol"="gene")) %>>%
+    filter(role=="TSG") %>>%
+    left_join(maf_AF_less5 %>>%group_by(gene_symbol,patient_id) %>>%
+                filter(mutation_type!="inframe_indel") %>>% #ここを除けばinframe_indelもはいる
+                filter(mutation_score==max(mutation_score))%>>%summarise_each(funs(.[1])))%>>%
+    mutate(mutation_type=ifelse(is.na(mutation_type),"none",mutation_type)) %>>%
+    mutate(mutation_type=ifelse(str_detect(mutation_type,"damaging"),"damaging",mutation_type))
+    #最後の行外せばpolyphenのprobably_damagingとpossibly_damagingをわけられる(通常damagingで一括)
+}
+
+##次の作図で各々のpatient number表示させるための準備
+pnum_all = rbind(lung_cna%>>%mutate(body_part="lung"),breast_cna%>>%mutate(body_part="breast")) %>>%
+  rbind(brain_cna%>>%mutate(body_part="brain")) %>>%
+  rbind(kidney_cna%>>%mutate(body_part="kidney")) %>>%
+  rbind(colorectal_cna%>>%mutate(body_part="colorectal"))%>>%
+  cna_add_less5inf()%>>%
+  group_by(gene_symbol,mutation_type) %>>%tally()
+pnum_breast =breast_cna%>>%mutate(body_part="breast") %>>%
+  cna_add_less5inf()%>>%group_by(gene_symbol,mutation_type) %>>%tally()
+pnum_lung   =lung_cna  %>>%mutate(body_part="lung") %>>%
+  cna_add_less5inf()%>>%group_by(gene_symbol,mutation_type) %>>%tally()
+pnum_brain  =brain_cna %>>%mutate(body_part="brain") %>>%
+  cna_add_less5inf()%>>%group_by(gene_symbol,mutation_type) %>>%tally()
+pnum_kidney =kidney_cna %>>%mutate(body_part="kidney") %>>%
+  cna_add_less5inf()%>>%group_by(gene_symbol,mutation_type) %>>%tally()
+pnum_colorectal =colorectal_cna %>>%mutate(body_part="colorectal") %>>%
+  cna_add_less5inf()%>>%group_by(gene_symbol,mutation_type) %>>%tally()
+
+
+#### 各種類のmutationがあるかorどれもないか、わけてそれぞれのsomatic mutationの起こり具合の図作成!!!
+## (filter(mutation_score==max(mutation_score)) %>>%)を入れないとsomatic mutatin 2個もdouble hit
+## 入れるとmafからのmutationは二箇所起こっていてもone-hitと考える
+## somatic mutationのカウントするpolyphenをいじれる
+rbind(lung_cna%>>%mutate(body_part="lung"),breast_cna%>>%mutate(body_part="breast")) %>>%
+  rbind(brain_cna%>>%mutate(body_part="brain")) %>>%
+  rbind(kidney_cna%>>%mutate(body_part="kidney")) %>>%
+  rbind(colorectal_cna%>>%mutate(body_part="colorectal")) %>>%
+#  filter(body_part=="brain") %>>%  #ここを変えると部位ごとになる
+  cna_add_less5inf()%>>%
+  left_join(maf_somatic_for_somatic_test %>>%filter(mutation_score>0.95) %>>%
+## 360行目のmutation_score>◯◯をいじるとsomatic mutationのカウントするpolyphenをいじれる
+            group_by(gene_symbol,patient_id)%>>%
+#              filter(mutation_score==max(mutation_score)) %>>%
+## これ↑を入れないとsomatic mutatin 2個もdouble hit、入れるとmafからのmutationは二箇所起こっていてもone-hitと考える
+            summarise(snp_num=n())) %>>%
+  mutate(cna_del=ifelse(nminor==0,ifelse(nmajor==0,"homodel","del"),"no"),
+         snp_num=as.double(ifelse(is.na(snp_num),0,snp_num))) %>>%
+  mutate(somatic_mutation=ifelse(cna_del=="homodel"|(cna_del=="del" & snp_num >=1)|snp_num==2,"double_hit",
+                                 ifelse(cna_del=="del"|snp_num==1,"one_hit","none"))) %>>%
+  mutate(somatic_mutation=ifelse(is.na(somatic_mutation),"none",somatic_mutation)) %>>%
+  mutate(somatic_order=ifelse(somatic_mutation=="double_hit",1,ifelse(somatic_mutation=="one_hit",2,3))) %>>%
+  mutype_order() %>>% #mutation_typeの図での順番用
+  ggplot()+
+  geom_bar(aes(x=reorder(mutation_type,mutation_type_order),fill=reorder(as.factor(somatic_mutation),somatic_order)),
+           position = "fill")+
+#  geom_text(data =pnum_brain,aes(x=mutation_type,y=0.1,label=n),size=3,position="stack")+ #ここのpnumも変える
+#  facet_wrap(~ gene_symbol)+
+  theme(strip.text = element_text(size=6),axis.text.x = element_text(angle = -45, hjust = 0))
+
+################上の解析をageでやってみる！！##################################
+###more5###
+rbind(lung_cna,breast_cna) %>>%
+  rbind(brain_cna) %>>%rbind(kidney_cna) %>>%rbind(colorectal_cna) %>>%
+  dplyr::select(gene_symbol,patient_id,nmajor,nminor) %>>%
+  left_join(driver_genes%>>%dplyr::select(gene,role),by=c("gene_symbol"="gene")) %>>%
+  filter(role=="TSG") %>>%
+  left_join(AF_more5) %>>%
+  filter(!is.na(ref)) %>>%
+  dplyr::select(gene_symbol,patient_id,nmajor,nminor,chr,start,ref,alt,AF_cancer,AF_1kg,AF_uk10k,AF_exac) %>>%
+  left_join(maf_AF_more5) %>>%
+  mutate(genotype=ifelse(is.na(genotype),"ref_homo",genotype)) %>>%
+  left_join(all_age)%>>%filter(!is.na(age)) %>>%
+  mutate(site=as.character(paste(gene_symbol,paste0("chr",chr),start,
+                                 paste0(ref,"to",alt),paste0("AF=",floor(AF_cancer*100)),sep=":"))) %>>%
+  mutate(genotype_order=ifelse(genotype=="ref_homo",1,ifelse(genotype=="hetero",2,3))) %>>%#図の順番用
+  ggplot()+
+  geom_boxplot(aes(x=reorder(genotype,genotype_order),y=age))+
+  geom_text(data =pnum,aes(x=genotype,y=10,label=n),size=3,position="stack")+
+  facet_wrap(~ site,ncol=5)+
+  geom_signif(aes(x=reorder(genotype,genotype_order),y=age),
+              comparisons = list(c("ref_homo","hetero")),
+              test = "wilcox.test",map_signif_level = T, col="red",y_position = 95)+
+  geom_signif(aes(x=reorder(genotype,genotype_order),y=age),
+              comparisons = list(c("hetero","alt_homo")),
+              test = "wilcox.test",map_signif_level = T, col="red",y_position = 100)+
+  coord_cartesian(ylim = c(0,120),expand=F)+
+  theme(strip.text = element_text(size=6),axis.text.x = element_text(angle = -45, hjust = 0))
+
+###less 5 ###
+pnum_all = rbind(lung_cna%>>%mutate(body_part="lung"),breast_cna%>>%mutate(body_part="breast")) %>>%
+  rbind(brain_cna%>>%mutate(body_part="brain")) %>>%
+  rbind(kidney_cna%>>%mutate(body_part="kidney")) %>>%
+  rbind(colorectal_cna%>>%mutate(body_part="colorectal"))%>>%
+  cna_add_less5inf() %>>%
+  left_join(patient_all_data%>>%dplyr::select(patient_id,age,cancer_type)%>>%
+              mutate(age=round(age/365.25*10)/10))%>>%filter(!is.na(age)) %>>%
+  group_by(cancer_type,mutation_type,gene_symbol) %>>%
+  summarise(mean_age=mean(age),n=n())
+
+rbind(lung_cna%>>%mutate(body_part="lung"),breast_cna%>>%mutate(body_part="breast")) %>>%
+  rbind(brain_cna%>>%mutate(body_part="brain")) %>>%
+  rbind(kidney_cna%>>%mutate(body_part="kidney")) %>>%
+  rbind(colorectal_cna%>>%mutate(body_part="colorectal")) %>>%
+#kidney_cna%>>%mutate(body_part="kidney")%>>%
+  cna_add_less5inf()%>>%
+  left_join(patient_all_data%>>%dplyr::select(patient_id,age,cancer_type)%>>%
+              mutate(age=round(age/365.25*10)/10))%>>%filter(!is.na(age)) %>>%
+  #filter(cancer_type=="KIRP") %>>%#View()
+  mutype_order() %>>% #mutation_typeの図での順番用
+  ggplot()+
+  geom_boxplot(aes(x=reorder(mutation_type,mutation_type_order),y=age))+
+  geom_signif(aes(x=reorder(mutation_type,mutation_type_order),y=age),
+              comparisons = list(c("truncating","none")),
+              test = "wilcox.test",map_signif_level = T, col="red", y_position = 95)+
+  geom_signif(aes(x=reorder(mutation_type,mutation_type_order),y=age),
+              comparisons = list(c("damaging","none")),
+              test = "wilcox.test",map_signif_level = T, col="red",y_position = 100)+
+  geom_signif(aes(x=reorder(mutation_type,mutation_type_order),y=age),comparisons = list(c("benign","none")),
+              test = "wilcox.test",map_signif_level = T, col="red", y_position = 108)+
+  coord_cartesian(ylim = c(0,120),expand=F)+
+#    stat_summary(aes(x=reorder(mutation_type,mutation_type_order),y=age),
+#                 fun.y = mean, geom="point",colour="blue", size=3) +
+#    stat_summary(aes(x=reorder(mutation_type,mutation_type_order),y=age),
+#                 fun.data = fun_mean, geom="text", vjust=-0.7, colour="blue")+
+  geom_text(data =pnum_all%>>%group_by(cancer_type,mutation_type)%>>%summarise(n=sum(n)),#%>>%filter(cancer_type=="KIRP"),
+            aes(x=mutation_type,y=10,label=n),size=3,position="stack")+ #ここのfilter変える
+ # facet_wrap(~ gene_symbol)+
+  facet_wrap(~ cancer_type,ncol=2)+
+  theme(strip.text = element_text(size=6),axis.text.x = element_text(angle = -45, hjust = 0))
+
+
+
+####遺伝子ごとではなくガン種ごとに一番強いmutation_typeでどれほどageの差があるか
+pnum_topmutype = rbind(lung_cna%>>%mutate(body_part="lung"),
+                       breast_cna%>>%mutate(body_part="breast")) %>>%
+  rbind(brain_cna%>>%mutate(body_part="brain")) %>>%
+  rbind(kidney_cna%>>%mutate(body_part="kidney")) %>>%
+  rbind(colorectal_cna%>>%mutate(body_part="colorectal"))%>>%
+  cna_add_less5inf() %>>%
+  left_join(patient_all_data%>>%dplyr::select(patient_id,age,cancer_type)%>>%
+  mutate(age=round(age/365.25*10)/10))%>>%filter(!is.na(age)) %>>%
+  mutype_order() %>>%
+#  left_join(loh_focal_gene)%>>%filter(!is.na(LOH_focal))%>>%
+  group_by(cancer_type,patient_id) %>>%
+  filter(mutation_type_order==min(mutation_type_order)) %>>%
+  summarise(mutation_type=first(mutation_type),age=first(age)) %>>%
+  group_by(cancer_type,mutation_type) %>>%
+  summarise(mean_age=round(mean(age)*100)/100,n=n())
+rbind(lung_cna%>>%mutate(body_part="lung")%>>%
+        dplyr::select(gene_symbol,patient_id,nmajor,nminor,body_part,cna_start,cna_end),
+      breast_cna%>>%mutate(body_part="breast")%>>%
+        dplyr::select(gene_symbol,patient_id,nmajor,nminor,body_part,cna_start,cna_end)) %>>%
+  rbind(brain_cna%>>%mutate(body_part="brain")%>>%
+          dplyr::select(gene_symbol,patient_id,nmajor,nminor,body_part,cna_start,cna_end)) %>>%
+  rbind(kidney_cna%>>%mutate(body_part="kidney")%>>%
+          dplyr::select(gene_symbol,patient_id,nmajor,nminor,body_part,cna_start,cna_end)) %>>%
+  rbind(colorectal_cna%>>%mutate(body_part="colorectal")%>>%
+          dplyr::select(gene_symbol,patient_id,nmajor,nminor,body_part,cna_start,cna_end)) %>>%
+  cna_add_less5inf()%>>%
+  left_join(patient_all_data%>>%dplyr::select(patient_id,age,cancer_type)%>>%
+              mutate(age=round(age/365.25*10)/10))%>>%filter(!is.na(age)) %>>%
+  mutype_order() %>>% #mutation_typeの図での順番用　かつmutation 強い順に重み付け
+#  left_join(loh_focal_gene)%>>%filter(!is.na(LOH_focal))%>>%
+#  filter(gene_symbol!="BRCA1",gene_symbol!="BRCA2") %>>%
+  group_by(cancer_type,patient_id) %>>%
+  filter(mutation_type_order==min(mutation_type_order)) %>>%
+  summarise(mutation_type=first(mutation_type),mutation_type_order=first(mutation_type_order),
+            age=first(age)) %>>%
+  ggplot()+
+  geom_boxplot(aes(x=reorder(mutation_type,mutation_type_order),y=age))+
+  geom_signif(aes(x=reorder(mutation_type,mutation_type_order),y=age),
+              comparisons = list(c("truncating","none")),
+              test = "wilcox.test",map_signif_level = T, col="red", y_position = 95)+
+  geom_signif(aes(x=reorder(mutation_type,mutation_type_order),y=age),
+              comparisons = list(c("damaging","none")),
+              test = "wilcox.test",map_signif_level = T, col="red",y_position = 100)+
+  geom_signif(aes(x=reorder(mutation_type,mutation_type_order),y=age),comparisons = list(c("benign","none")),
+              test = "wilcox.test",map_signif_level = T, col="red", y_position = 108)+
+  coord_cartesian(ylim = c(0,120),expand=F)+
+  geom_text(data =pnum_topmutype,
+            aes(x=mutation_type,y=10,label=n),size=3,position="stack")+
+  geom_text(data =pnum_topmutype,
+            aes(x=mutation_type,y=30,label=mean_age),size=3,position="stack",colour="red")+
+  facet_wrap(~ cancer_type,ncol=2)+
+  theme(strip.text = element_text(size=6),axis.text.x = element_text(angle = -45, hjust = 0))
+
+
+
+
+###########################################################################################################
+############# rare mutation (5% >) でがん細胞でdeletionが起こってもう片方がおちたもsiteの解析 #############
+
+### がん細胞でdeletionが起こっているpatient siteを抽出　(perlでvarscan情報を追加する)
+rbind(lung_cna%>>%mutate(body_part="lung")%>>%
+        dplyr::select(gene_symbol,patient_id,nmajor,nminor,body_part,cna_start,cna_end),
+      breast_cna%>>%mutate(body_part="breast")%>>%
+        dplyr::select(gene_symbol,patient_id,nmajor,nminor,body_part,cna_start,cna_end)) %>>%
+  rbind(brain_cna%>>%mutate(body_part="brain")%>>%
+          dplyr::select(gene_symbol,patient_id,nmajor,nminor,body_part,cna_start,cna_end)) %>>%
+  rbind(kidney_cna%>>%mutate(body_part="kidney")%>>%
+          dplyr::select(gene_symbol,patient_id,nmajor,nminor,body_part,cna_start,cna_end)) %>>%
+  rbind(colorectal_cna%>>%mutate(body_part="colorectal")%>>%
+          dplyr::select(gene_symbol,patient_id,nmajor,nminor,body_part,cna_start,cna_end)) %>>%
+  left_join(driver_genes%>>%dplyr::select(gene,role),by=c("gene_symbol"="gene")) %>>%
+  left_join(maf_AF_less5 %>>%filter(mutation_type!="inframe_indel"))%>>%
+  filter(!is.na(mutation_type)) %>>%
+  mutate(mutation_type=ifelse(str_detect(mutation_type,"damaging"),"damaging",mutation_type))%>>%
+  filter(cna_start < start, start < cna_end) %>>%
+  filter(nmajor!=0,nminor==0,chr!="X") %>>%
+  dplyr::select(body_part,patient_id,chr,start,ref,alt,mutation_type,nmajor,nminor,gene_symbol,role) %>>%
+  write_df("CNA/all_patient/all_patient_del_happend_germ_site.tsv")
+
+#####　ここでperl実行　#######
+
+del_happend_site=read_tsv("CNA/all_patient/all_patient_del_happend_germ_site_with_somadata.tsv")
+
+### deletionでaltがのこったsiteだけ抽出して年齢のboxplot
+all_cancer_type_del_happen = rbind(lung_cna%>>%mutate(body_part="lung")%>>%
+        dplyr::select(gene_symbol,patient_id,nmajor,nminor,body_part,cna_start,cna_end),
+      breast_cna%>>%mutate(body_part="breast")%>>%
+        dplyr::select(gene_symbol,patient_id,nmajor,nminor,body_part,cna_start,cna_end)) %>>%
+  rbind(brain_cna%>>%mutate(body_part="brain")%>>%
+          dplyr::select(gene_symbol,patient_id,nmajor,nminor,body_part,cna_start,cna_end)) %>>%
+  rbind(kidney_cna%>>%mutate(body_part="kidney")%>>%
+          dplyr::select(gene_symbol,patient_id,nmajor,nminor,body_part,cna_start,cna_end)) %>>%
+  rbind(colorectal_cna%>>%mutate(body_part="colorectal")%>>%
+          dplyr::select(gene_symbol,patient_id,nmajor,nminor,body_part,cna_start,cna_end)) %>>%
+  left_join(driver_genes%>>%dplyr::select(gene,role),by=c("gene_symbol"="gene")) %>>%
+  filter(role=="TSG") %>>%　#ここをoncogene TSGに変える
+  left_join(del_happend_site%>>%filter(!is.na(tumor_remained), tumor_remained=="alt")) %>>%
+  mutate(mutation_type=ifelse(is.na(mutation_type),"none",mutation_type)) %>>%
+  left_join(patient_all_data%>>%dplyr::select(patient_id,age,cancer_type)%>>%
+              mutate(age=round(age/365.25*10)/10))%>>%filter(!is.na(age)) %>>%
+  mutype_order() %>>% #mutation_typeの図での順番用　かつmutation 強い順に重み付け
+  group_by(cancer_type,patient_id) %>>%
+  filter(mutation_type_order==min(mutation_type_order)) %>>%
+  summarise(mutation_type=first(mutation_type),mutation_type_order=first(mutation_type_order),
+            age=first(age))
+  ggplot(data = all_cancer_type_del_happen)+
+  geom_boxplot(aes(x=reorder(mutation_type,mutation_type_order),y=age))+
+  geom_signif(aes(x=reorder(mutation_type,mutation_type_order),y=age),
+              comparisons = list(c("truncating","none")),
+              test = "wilcox.test",map_signif_level = T, col="red", y_position = 95)+
+  geom_signif(aes(x=reorder(mutation_type,mutation_type_order),y=age),
+              comparisons = list(c("damaging","none")),
+              test = "wilcox.test",map_signif_level = T, col="red",y_position = 100)+
+  geom_signif(aes(x=reorder(mutation_type,mutation_type_order),y=age),comparisons = list(c("benign","none")),
+              test = "wilcox.test",map_signif_level = T, col="red", y_position = 108)+
+  coord_cartesian(ylim = c(0,120),expand=F)+
+  geom_text(data =all_cancer_type_del_happen%>>%group_by(cancer_type,mutation_type)%>>%tally(),
+            aes(x=mutation_type,y=10,label=n),size=3,position="stack")+
+  geom_text(data =all_cancer_type_del_happen%>>%group_by(cancer_type,mutation_type)%>>%
+                summarise(age=round(mean(age)*100)/100),
+              aes(x=mutation_type,y=30,label=age),size=3,position="stack",colour="red")+
+  facet_wrap(~ cancer_type,ncol=2)+
+  theme(strip.text = element_text(size=6),axis.text.x = element_text(angle = -45, hjust = 0))
+
+###deletion起こった時どれくらい頻度の少ないmutationは残る？
+del_happend_site %>>%
+  filter(!is.na(tumor_remained),tumor_remained!="unknown") %>>%
+  left_join(patient_all_data%>>%dplyr::select(patient_id,age,cancer_type))%>>%
+  ggplot()+
+  geom_bar(aes(x=as.factor(mutation_type),fill=tumor_remained),position = "fill")+
+  facet_grid(~ cancer_type)+
+  theme(strip.text = element_text(size=6),axis.text.x = element_text(angle = -45, hjust = 0))
+
+### ガンでdeletionが起こった時germline mutationが残ってるのが多い遺伝子は？
+loh_focal_gene = del_happend_site %>>%filter(role=="TSG")%>>%
+  filter(!is.na(tumor_remained), tumor_remained!="unknown") %>>%
+  left_join(patient_all_data%>>%dplyr::select(patient_id,age,cancer_type))%>>%
+  group_by(cancer_type,gene_symbol,tumor_remained) %>>%
+  tally() %>>%
+  tidyr::spread(key = tumor_remained, value = n, fill = 0) %>>%
+  filter(ref < alt) %>>%
+#  group_by(cancer_type,gene_symbol)%>>%tally()%>>%
+  mutate(LOH_focal="yes")
+  
