@@ -4,7 +4,7 @@ use strict;
 use List::Util qw(sum);
 
 
-my $exac_path=$ENV{"HOME"}."/.vep/ExAC_nonTCGA.r0.3.1.sites.vep.vcf.gz";
+my $exac_path=$ENV{"HOME"}."/.vep/ExAC_nonTCGA.r1.sites.vep.vcf.gz";
 (-e $exac_path) or die "ERROR:$exac_path is not exist!\n";
 my $driver_genes_path="/Volumes/cancer/kaz_gdc/driver_genes.tsv";
 (-e $driver_genes_path) or die "ERROR:$driver_genes_path is not exist!\n";
@@ -46,7 +46,7 @@ while(<VCF>){
 						print OUTV "$comment";
 				}
 				my ($ac,$an,$csq);
-				if($line[7]=~/AC=([0-9,]+);.+;AN=(\d+);.+;CSQ=(.+)$/){
+				if($line[7]=~/AC=([0-9,]+);.+;AN=(\d+);.+;CSQ=([^;]+);/){
 						($ac,$an,$csq)=($1,$2,$3);
 				}else{die "ERROR:cannot extract AC,AN,CAQ from $_\n";}
 				my $focal=0;

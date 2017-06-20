@@ -4,7 +4,7 @@ use strict;
 use List::Util qw(sum);
 
 
-my $exac_path=$ENV{"HOME"}."/.vep/ExAC_nonTCGA.r0.3.1.sites.vep.vcf.gz";
+my $exac_path=$ENV{"HOME"}."/.vep/ExAC_nonTCGA.r1.sites.vep.vcf.gz";
 (-e $exac_path) or die "ERROR:$exac_path is not exist!\n";
 my $driver_genes_path="/Volumes/cancer/kaz_gdc/driver_genes.tsv";
 (-e $driver_genes_path) or die "ERROR:$driver_genes_path is not exist!\n";
@@ -46,7 +46,7 @@ while(<VCF>){
 						print OUTV "$comment";
 				}
 				my ($ac,$an,$csq);
-				if($line[7]=~/AC=([0-9,]+);.+;AN=(\d+);.+;CSQ=(.+)$/){
+				if($line[7]=~/AC=([0-9,]+);.+;AN=(\d+);.+;CSQ=([^;]+);/){
 						($ac,$an,$csq)=($1,$2,$3);
 				}else{die "ERROR:cannot extract AC,AN,CAQ from $_\n";}
 				my $focal=0;
@@ -106,18 +106,34 @@ foreach my $chr (@chr){
 								($chr,$pos)=($1,$2);
 						}else{print  "WARNIG:there cant liftover $_\tso we dont use this variation\n";next;
 						}
-						my $fasta=`samtools faidx /Users/kazuki/.vep/homo_sapiens/86_GRCh38/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz $chr:$pos-$pos`;
-						if($fasta =~ /\n([ATGC])\n$/){$refseq=$1;
+						my $end=$pos + length($line[3]) - 1;
+						my $fasta=`samtools faidx /Users/kazuki/.vep/homo_sapiens/86_GRCh38/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz $chr:$pos-$end`;
+						if($fasta =~ /\n([ATGC]+)\n$/){$refseq=$1;
 						}else{die "ERROR: what happen?\n$_\n$fasta";}
 						if($refseq eq $line[3]){
 								if($line[4] =~ /,/){
 										my @alt=split(/,/,$line[4]);
 										my @ac =split(/,/,$line[7]);
 										for(my $i=0;@alt>$i;$i++){
-												print OUT "$chr\t$pos\t$line[2]\t$line[3]\t$alt[$i]\t$line[5]\t$line[6]\tAC=$ac[$i];AN=$line[8]\n";
+												my($ref_length,$alt_length,$ref,$alt)=(length($line[3]),length($alt[$i]),$line[3],$alt[$i]);
+												while($ref and $alt and substr($ref,0,1) eq substr($alt,0,1) and $ref ne $alt){
+														($ref,$alt) = map{$_ =substr($_,1);($_?$_:"-")}($ref,$alt);
+														--$ref_length;--$alt_length;++$pos;
+												}
+												if(($ref_length == $alt_length)||($ref eq "-" and $alt eq "-")){next;}
+												if($ref eq "-"){--$pos;}
+												print OUT "$chr\t$pos\t$line[2]\t$ref\t$alt\t$line[5]\t$line[6]\tAC=$ac[$i];AN=$line[8]\n";
 										}
 								}else{
-										print OUT "$chr\t$pos\t".join("\t",@line[2..6])."\tAC=$line[7];AN=$line[8]\n";
+										my($ref_length,$alt_length,$ref,$alt)=(length($line[3]),length($line[4]),$line[3],$line[4]);
+										while($ref and $alt and substr($ref,0,1) eq substr($alt,0,1) and $ref ne $alt){
+												($ref,$alt) = map{$_ =substr($_,1);($_?$_:"-")}($ref,$alt);
+												--$ref_length;--$alt_length;++$pos;
+										}
+										if(($ref_length == $alt_length)||($ref eq "-" and $alt eq "-")){next;}
+										if($ref eq "-"){--$pos;}
+										print OUT "$chr\t$pos\t$line[2]\t$ref\t$alt\t$line[5]\t$line[6]\tAC=$line[7];AN=$line[8]\n";
+
 								}
 						}else{
 								print ERR "$refseq:$pos\t$_\n";
