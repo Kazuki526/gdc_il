@@ -5,8 +5,8 @@ use warnings;
 
 my %coverage=();
 my %coverage_xmale=();
-my %mid_af_coverage=();
-my $mid_af_list="AF_mid_list.tsv";
+my %mid_af=();
+my $mid_af_list="/Volumes/areca42TB2/gdc/varscan/all_patient/AF_mid_list.tsv";
 (-e $mid_af_list) or die "ERROR:AF_mid_list.tsv is not exist!!\n";
 open(MA,$mid_af_list);
 my @colum=split(/\t/,chomp(<MA>));
@@ -18,12 +18,12 @@ for(my $i=0;@colum>$i;$i++){
 while(<MA>){
 		chomp;
 		my @line=split(/\t/,);
-		$mid_af_coverage{$line[$chrn]}{$line[$posin]}="ok";
+		$mid_af{$line[$chrn]}{$line[$posin]}="ok";
 }
 close MA;
 
-open(OUTS,">");
-print OUTS "patient_id\tage\tchr\tstart\tfocal\n";
+open(OUTS,">/Volumes/areca42TB2/gdc/varscan/all_patient/AF_mid_coverage_by_patient.tsv");
+print OUTS "patient_id\tage\tgender\tchr\tstart\tfocal\n";
 my @project=qw(hnsc ov prad thca ucec);
 my @bodypart=qw(brain breast lung kidney colorectal);
 foreach my $project(@project){
@@ -37,14 +37,22 @@ foreach my $bodypart (@bodypart){
 close OUTS;
 
 my @chr=qw(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X);
-open(OUTC,">coverage_all.tsv");
-open(OUTX,">coverage_X_male.tsv");
+open(OUTC,">/Volumes/areca42TB2/gdc/varscan/all_patient/coverage_all.tsv");
+print OUTC "chr\tstart\tan_cancer\n";
+open(OUTX,">/Volumes/areca42TB2/gdc/varscan/all_patient/coverage_X_male.tsv");
+print OUTX "chr\tstart\tan_male_cancer\n";
 foreach my $chr(@chr){
 		foreach my $posi(sort{$a<=>$b}keys %{$an{$chr}}){
-				print OUT "$chr\t$posi\t$an{$chr}{$posi}\n";
+				print OUTC "chr$chr\t$posi\t$an{$chr}{$posi}\n";
+		}
+		if($chr eq "X"){
+				foreach my $posi (sort{$a<=>$b}keys %coverage_xmale){
+						print OUTX "chr$chr\t$posi\t$coverage_xmale{$posi}\n";
+				}
 		}
 }
-close OUT;
+close OUTC;
+close OUTX
 
 
 
@@ -56,7 +64,7 @@ sub main ( $ ){
 				my $path="/Volumes/areca42TB2/gdc/";
 
 		my %patient=();
-		#remove errored bam by using gender_age file
+		#read gender_age and list patient
 		open(GA,$path."varscan/$pj/gender_age.tsv");
 		<GA>; #delete colum line
 		while(<GA>){
@@ -67,7 +75,8 @@ sub main ( $ ){
 		}
 		close GA;
 		
-		print "print coverage file of $pj\n";
+		print "read depth file of $pj\n";
+		#read norm depth file
 		my $dp_dir=$path."varscan/$pj/depth";
 		my @dpls=`ls $dp_dir|grep out|grep -v tout`;chomp @dpls;
 		my %dp_focal=();
@@ -86,6 +95,8 @@ sub main ( $ ){
 				}
 				close DP;
 		}
+
+		#read tumor depth file
 		my @dplst=`ls $dp_dir|grep tout`;chomp @dplst;
 		foreach my $dp_file(@dplst){
 				$|=1;
@@ -122,9 +133,15 @@ sub main ( $ ){
 				}
 				close DP;
 		}
+		#print out high&mid allele frequncy site 
 		foreach my $chr(keys%mid_af){
 				foreach my $posi(keys %{$mid_af{$chr}}){
 						foreach my $patient_id (keys %patient){
+								if((defined $dp_focal{$patient_id}{$chr}{$posi}{norm})&&(defined $dp_focal{$patient}{$chr}{$posi}{tumor})){
+										print OUTS "$patient_id\t$patient{$patient_id}{age}\t$patient{$patient_id}{gender}\t$chr\t$posi\tok\n";
+								}else{
+										print OUTS "$patient_id\t$patient{$patient_id}{age}\t$patient{$patient_id}{gender}\t$chr\t$posi\tno\n";
+								}
 						}
 				}
 		}
