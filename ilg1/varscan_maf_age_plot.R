@@ -134,7 +134,8 @@ norm_maf = rbind(body_part_maf%>>%select(-body_part),cancer_type_maf)
 rm(body_part_maf,cancer_type_maf)
 
 
-###################
+###################################################################################################
+########## CNA data ##########
 #ascat data
 extract_ascat = function(.bp){
   read_tsv(paste0("/Volumes/areca42TB/tcga/CNA/",.bp,"/cel/annotate_ascat.tsv.gz"),
@@ -153,7 +154,78 @@ cantype_ascat = data.frame(cancer_type = c("hnsc","ov","prad","thca","ucec")) %>
 annotate_ascat=rbind(bp_ascat,cantype_ascat)
 rm(bp_ascat,cantype_ascat)
 
-#############################################################
+########### CNAのdel,amp頻度のランキング(cancer type ごとに) ###########
+#片落ちranking
+loh_ranking = annotate_ascat %>>%
+  group_by(cancer_type,patient_id,gene_symbol) %>>%
+  summarise(nmajor=min(nmajor),nminor=min(nminor)) %>>% ungroup() %>>%
+  filter(nminor==0) %>>%
+  count(cancer_type,gene_symbol) %>>% ungroup() %>>%
+  left_join(driver_genes %>>%select(gene,role),by = c("gene_symbol"="gene")) %>>%
+  filter(role=="TSG") %>>%
+  group_by(cancer_type) %>>%
+  mutate(loh_rank = min_rank(desc(n))) 
+# homo deletion ranking
+homodel_ranking = annotate_ascat %>>%
+  group_by(cancer_type,patient_id,gene_symbol) %>>%
+  summarise(nmajor=min(nmajor),nminor=min(nminor)) %>>% ungroup() %>>%
+  filter(nmajor==0,nminor==0) %>>%
+  count(cancer_type,gene_symbol) %>>% ungroup() %>>%
+  left_join(driver_genes %>>%select(gene,role),by = c("gene_symbol"="gene")) %>>%
+  filter(role=="TSG") %>>%
+  group_by(cancer_type) %>>%
+  mutate(homodel_rank = min_rank(desc(n)))
+# 1 copy になっている数ランキング
+del_ranking = annotate_ascat %>>%
+  group_by(cancer_type,patient_id,gene_symbol) %>>%
+  summarise(nmajor=min(nmajor),nminor=min(nminor)) %>>% ungroup() %>>%
+  filter(nmajor <=1,nminor==0) %>>%
+  count(cancer_type,gene_symbol) %>>% ungroup() %>>%
+  left_join(driver_genes %>>%select(gene,role),by = c("gene_symbol"="gene")) %>>%
+  filter(role=="TSG") %>>%
+  group_by(cancer_type) %>>%
+  mutate(del_rank = min_rank(desc(n)))
+
+cna_del_rank = loh_ranking %>>%dplyr::select(-n) %>>%
+  left_join(homodel_ranking %>>%dplyr::select(-n)) %>>%
+  left_join(del_ranking %>>%dplyr::select(-n))
+rm(loh_ranking,homodel_ranking,del_ranking)
+#homo delは関係なさそう、、、
+
+
+
+####################################################################################################################
+########## somatic mutation ############
+#mutation抽出はgerm_pvalu_plot.Rにて
+read_maf = function(.file_name){
+  read_tsv(.file_name) %>>%
+    mutate(patient_id = str_extract(Tumor_Sample_Barcode,"TCGA-\\w\\w-\\w\\w\\w\\w")) %>>%
+    dplyr::select(-Tumor_Sample_Barcode,-strand,-cancer_type,-FILTER)
+}
+#somatic mutationのmaf
+somatic_maf = data.frame(cancer_type = c("BRCA","COAD","GBM","HNSC","KICH","KIRC","KIRP","LGG",
+                     "LUAD","LUSC","OV","PRAD","READ","THCA","UCEC")) %>>%
+  mutate(file=paste0("kaz_maf/extracted_maf/",tolower(cancer_type),"_topdriver105genes.maf"))　%>>%
+  mutate(data = purrr::map(file,~read_maf(.))) %>>%
+  unnest() %>>%dplyr::select(-file) %>>%
+  (?.%>>%dplyr::count(gene_symbol,Transcript_ID)%>>%group_by(gene_symbol)%>>%filter(n() >1))
+## ENST00000507379とENST00000300305,ENST00000610664は除く
+somatic_maf = somatic_maf %>>%
+  filter(Transcript_ID !="ENST00000507379",Transcript_ID != "ENST00000300305", Transcript_ID != "ENST00000610664")
+# これで１つのgene に1つのtranscript_IDとなる。
+
+
+### somatic mutation頻度の高い遺伝子(cancer typeごとに)
+somatic_ranking = somatic_maf %>>%
+  tidyr::separate(CDS_position,into = c("cds_position","cds_length")) %>>%
+  group_by(cancer_type,gene_symbol,mutype) %>>%
+  summarise(n=n(),cds_length=first(cds_length)) %>>%
+  left_join(driver_genes %>>%select(gene,role),by = c("gene_symbol"="gene")) %>>%
+  group_by(cancer_type,mutype) %>>%
+  mutate(rank = min_rank(desc(n)))
+
+
+############################################################################################################
 ### read coverage files ####
 #doing by body_part
 coverage_bp = data.frame(body_part=c("breast","brain","lung","kidney","colorectal")) %>>%
@@ -195,21 +267,6 @@ coverage_x_tbl = full_join(coverage_x_bp,coverage_x_ct) %>>%
   dplyr::select(-an_can_bp,-an_can_ct) %>>%ungroup()
 rm(coverage_x_bp,coverage_x_ct)
 
-#############################################################################
-#somatic mutation
-#mutation抽出はgerm_pvalu_plot.Rにて
-read_maf = function(.file_name){
-  read_tsv(.file_name) %>>%
-    mutate(patient_id = str_extract(Tumor_Sample_Barcode,"TCGA-\\w\\w-\\w\\w\\w\\w")) %>>%
-    dplyr::select(-Tumor_Sample_Barcode,-strand,-cancer_type,-FILTER)
-}
-somatic_maf = data.frame(cancer_type = c("BRCA","COAD","GBM","HNSC","KICH","KIRC","KIRP","LGG",
-                     "LUAD","LUSC","OV","PRAD","READ","THCA","UCEC")) %>>%
-  mutate(file=paste0("kaz_maf/extracted_maf/",tolower(cancer_type),"_topdriver105genes.maf"))　%>>%
-  mutate(data = purrr::map(file,~read_maf(.))) %>>%
-  unnest() %>>%dplyr::select(-file) %>>%
-  (?.%>>%dplyr::count(gene_symbol,Transcript_ID)%>>%group_by(gene_symbol)%>>%filter(n() >1))
-
 
 ###################################################################################################################
 #prepare 1000genomes UK10K EXAC(nonTCGA) data sets
@@ -239,6 +296,8 @@ vcf_exac=read_tsv("/Volumes/areca42TB/exac/file/exac_nontcga_liftovered_checked_
 vcf_exac_indel=read_tsv("/Volumes/areca42TB/exac/file/exac_nontcga_liftovered_checked_likevcf_indel.tsv.gz",col_types = "cdccdd")
 vcf_exac =rbind(vcf_exac,vcf_exac_indel)
 rm(vcf_exac_indel)
+
+
 ######################################################################################################
 ################################### germline mutation list ###########################################
 ######################################################################################################
@@ -592,8 +651,3 @@ mean_age = patient_list %>>%group_by(cancer_type) %>>%summarise(age=round(mean(a
 .plot
 ggsave("age_plot/class3_signtest_byCT.pdf",.plot,height = 15,width = 15)
 
-
-
-write_df(somatic_maf,"~/Dropbox/install/tvz/somatic.maf")
-write_df(annotate_ascat,"~/Dropbox/install/tvz/annotate_ascat.tsv")
-write_df(topdriver_bed,"~/Dropbox/install/tvz/topdriver_bed.tsv")
