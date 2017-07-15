@@ -9,10 +9,11 @@ my %mid_af=();
 my $mid_af_list="/Volumes/areca42TB2/gdc/varscan/all_patient/AF_mid_list.tsv";
 (-e $mid_af_list) or die "ERROR:AF_mid_list.tsv is not exist!!\n";
 open(MA,$mid_af_list);
-my @colum=split(/\t/,chomp(<MA>));
+my $colum=<MA>;chomp$colum;
+my @colum=split(/\t/,$colum);
 my ($chrn,$posin);
 for(my $i=0;@colum>$i;$i++){
-		if($colum[$i] eq "chr"){$chn=$i;
+		if($colum[$i] eq "chr"){$chrn=$i;
 		}elsif($colum[$i] eq "start"){$posin=$i}
 }
 while(<MA>){
@@ -42,8 +43,8 @@ print OUTC "chr\tstart\tan_cancer\n";
 open(OUTX,">/Volumes/areca42TB2/gdc/varscan/all_patient/coverage_X_male.tsv");
 print OUTX "chr\tstart\tan_male_cancer\n";
 foreach my $chr(@chr){
-		foreach my $posi(sort{$a<=>$b}keys %{$an{$chr}}){
-				print OUTC "chr$chr\t$posi\t$an{$chr}{$posi}\n";
+		foreach my $posi(sort{$a<=>$b}keys %{$coverage{$chr}}){
+				print OUTC "chr$chr\t$posi\t$coverage{$chr}{$posi}\n";
 		}
 		if($chr eq "X"){
 				foreach my $posi (sort{$a<=>$b}keys %coverage_xmale){
@@ -52,7 +53,7 @@ foreach my $chr(@chr){
 		}
 }
 close OUTC;
-close OUTX
+close OUTX;
 
 
 
@@ -77,20 +78,19 @@ sub main ( $ ){
 		
 		print "read depth file of $pj\n";
 		#read norm depth file
-		my $dp_dir=$path."varscan/$pj/depth";
 		my @dpls=`ls $dp_dir|grep out|grep -v tout`;chomp @dpls;
 		my %dp_focal=();
 		foreach my $dp_file(@dpls){
 				$|=1;
 				open(DP,"$dp_dir/$dp_file");
-				my @dpcolum=split(/\t/,chomp(<DP>));
+				my $dpcolum=<DP>;chomp$dpcolum;
+				my @dpcolum=split(/\t/,$dpcolum);
 				while(<DP>){
 						chomp;
 						my @line=split(/\t/,);
 						$line[0] =~s/^chr//;
-						if(!defined $coverage{$line[0]}{$line[1]}){$an{$line[0]}{$line[1]}=0;}
 						for(my $i=2;@line>$i;$i++){
-								if($line[$i] >=8){$dp_focal{$dpcolum[$i]}{$line[0]}{$line[1]}{norm}="ok";}
+								if($line[$i] >=8){$dp_focal{$line[0]}{$line[1]}{$dpcolum[$i]}=1;}
 						}
 				}
 				close DP;
@@ -102,7 +102,8 @@ sub main ( $ ){
 				$|=1;
 				my @male=();
 				open(DP,"$dp_dir/$dp_file");
-				my @dpcolum=split(/\t/,chomp(<DP>));
+				my $dpcolum=<DP>;chomp$dpcolum;
+				my @dpcolum=split(/\t/,$dpcolum);
 				for(my $i=2;@dpcolum>$i;$i++){
 						if($patient{$dpcolum[$i]}{gender} eq "male"){push(@male,$i);}
 				}
@@ -110,40 +111,39 @@ sub main ( $ ){
 						chomp;
 						my @line=split(/\t/,);
 						$line[0] =~s/^chr//;
-						if(!defined $coverage{$line[0]}{$line[1]}){$an{$line[0]}{$line[1]}=0;}
+						if(!defined $coverage{$line[0]}{$line[1]}){$coverage{$line[0]}{$line[1]}=0;}
 						if($line[0] ne "X"){
 								for(my $i=2;@line>$i;$i++){
-										if(($line[$i] >=8)&&(defined $dp_focal{$dpcolum[$i]}{$line[0]}{$line[1]}{norm})){
+										if(($line[$i] >=8)&&(defined $dp_focal{$line[0]}{$line[1]}{$dpcolum[$i]})){
 														$coverage{$line[0]}{$line[1]}+=2;
-														$dp_focal{$dpcolum[$i]}{$line[0]}{$line[1]}{tumor}="ok";
+														if(defined $mid_af{"chr$line[0]"}{$line[1]}){
+																print OUTS "$dpcolum[$i]\t$patient{$dpcolum[$i]}{age}\t$patient{$dpcolum[$i]}{gender}\tchr$line[0]\t$line[1]\tok\n";
+														}
+										}elsif(defined $mid_af{"chr$line[0]"}{$line[1]}){
+														print OUTS "$dpcolum[$i]\t$patient{$dpcolum[$i]}{age}\t$patient{$dpcolum[$i]}{gender}\tchr$line[0]\t$line[1]\tno\n";
 										}
 								}
 						}else{
 								for(my $i=2;@line>$i;$i++){
-										if((grep{$_ eq $i}@male)&&($line[$i] >=6)&&(defined $dp_focal{$dpcolum[$i]}{$line[0]}{$line[1]}{norm})){
+										if((grep{$_ eq $i}@male)&&($line[$i] >=6)&&(defined $dp_focal{$line[0]}{$line[1]}{$dpcolum[$i]})){
 												$dp_focal{$dpcolum[$i]}{$line[0]}{$line[1]}{tumor}="ok";
 												$coverage{$line[0]}{$line[1]}++;
 												$coverage_xmale{$line[1]}++;
-										}elsif((!grep{$_ eq $i}@male)&&($line[$i] >=6)&&(defined $dp_focal{$dpcolum[$i]}{$line[0]}{$line[1]}{norm})){
+										}elsif((!grep{$_ eq $i}@male)&&($line[$i] >=6)&&(defined $dp_focal{$line[0]}{$line[1]}{$dpcolum[$i]})){
 												$dp_focal{$dpcolum[$i]}{$line[0]}{$line[1]}{tumor}="ok";
 												$coverage{$line[0]}{$line[1]}+=2;
+										}
+										if(defined $mid_af{"chr$line[0]"}{$line[1]}){
+												if(($line[$i] >=6)&&(defined $dp_focal{$line[0]}{$line[1]}{$dpcolum[$i]})){
+														print OUTS "$dpcolum[$i]\t$patient{$dpcolum[$i]}{age}\t$patient{$dpcolum[$i]}{gender}\tchr$line[0]\t$line[1]\tok\n";
+												}else{
+														print OUTS "$dpcolum[$i]\t$patient{$dpcolum[$i]}{age}\t$patient{$dpcolum[$i]}{gender}\tchr$line[0]\t$line[1]\tno\n";
+												}
 										}
 								}
 						}
 				}
 				close DP;
-		}
-		#print out high&mid allele frequncy site 
-		foreach my $chr(keys%mid_af){
-				foreach my $posi(keys %{$mid_af{$chr}}){
-						foreach my $patient_id (keys %patient){
-								if((defined $dp_focal{$patient_id}{$chr}{$posi}{norm})&&(defined $dp_focal{$patient}{$chr}{$posi}{tumor})){
-										print OUTS "$patient_id\t$patient{$patient_id}{age}\t$patient{$patient_id}{gender}\t$chr\t$posi\tok\n";
-								}else{
-										print OUTS "$patient_id\t$patient{$patient_id}{age}\t$patient{$patient_id}{gender}\t$chr\t$posi\tno\n";
-								}
-						}
-				}
 		}
 }
 
