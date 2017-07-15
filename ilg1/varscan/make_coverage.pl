@@ -13,13 +13,14 @@ my $colum=<MA>;chomp$colum;
 my @colum=split(/\t/,$colum);
 my ($chrn,$posin);
 for(my $i=0;@colum>$i;$i++){
-		if($colum[$i] eq "chr"){$chrn=$i;
-		}elsif($colum[$i] eq "start"){$posin=$i}
+		if($colum[$i] eq "chr"){$chn=$i;
+		}elsif($colum[$i] eq "start"){$posin=$i;
+		}
 }
 while(<MA>){
 		chomp;
 		my @line=split(/\t/,);
-		$mid_af{$line[$chrn]}{$line[$posin]}="ok";
+		$mid_af{$line[$chrn]}{$line[$posin]}{$line[$refn]}{$line[$altn]}="ok";
 }
 close MA;
 
