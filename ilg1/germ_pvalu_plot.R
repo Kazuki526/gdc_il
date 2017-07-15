@@ -210,9 +210,11 @@ maf_norm_colorectal_silent=read_tsv("maf_norm/united_maf/colorectal_silent.maf")
 #       kidney it is kirc kirp kich
 muse_mutect_every_path=function(.bp){
   .colnames = c('Hugo_Symbol','Chromosome','Start_Position','End_Position','Reference_Allele','Tumor_Seq_Allele1',
-                'Tumor_Seq_Allele2','Consequence','PolyPhen','FILTER','Tumor_Sample_Barcode')
+                'Tumor_Seq_Allele2','Consequence','PolyPhen','FILTER','Tumor_Sample_Barcode',
+                't_depth','t_ref_count','t_alt_count','CDS_position','HGVSc','Protein_position','HGVSp_Short',
+                'CANONICAL','Transcript_ID')
   .cols = .colnames %>>%
-  {setNames(c('c','c','d','d','c','c','c','c','c','c','c'), .)} %>>%
+  {setNames(c('c','c','d','d','c','c','c','c','c','c','c','d','d','d','c','c','c','c','c','c'), .)} %>>%
   {do.call(readr::cols_only, as.list(.))}
   strip_maf = function(infile) {
     read_tsv(infile, comment='#', col_types=.cols) %>>%
@@ -261,31 +263,41 @@ brain_maf=full_join(lgg_maf,gbm_maf) %>>%
   filter(!is.na(gender))%>>%
   dplyr::select(-Tumor_Sample_Barcode,-gender)
 
-#kirc_maf=muse_mutect_every_path("kirc")%>>%mutate(cancer_type="KIRC")
-#write_df(kirc_maf,"kaz_maf/extracted_maf/kirc_topdriver105genes.maf")
+#muse_mutect_every_path("kirc")%>>%mutate(cancer_type="KIRC") %>>%
+#  write_df("kaz_maf/extracted_maf/kirc_topdriver105genes.maf")
 kirc_maf=read_tsv("kaz_maf/extracted_maf/kirc_topdriver105genes.maf")
-#kirp_maf=muse_mutect_every_path("kirp")%>>%mutate(cancer_type="KIRP")
-#write_df(kirp_maf,"kaz_maf/extracted_maf/kirp_topdriver105genes.maf")
+#muse_mutect_every_path("kirp")%>>%mutate(cancer_type="KIRP") %>>%
+#  write_df("kaz_maf/extracted_maf/kirp_topdriver105genes.maf")
 kirp_maf=read_tsv("kaz_maf/extracted_maf/kirp_topdriver105genes.maf")
-#kich_maf=muse_mutect_every_path("kich")%>>%mutate(cancer_type="KICH")
-#write_df(kich_maf,"kaz_maf/extracted_maf/kich_topdriver105genes.maf")
+muse_mutect_every_path("kich")%>>%mutate(cancer_type="KICH") %>>%
+  write_df("kaz_maf/extracted_maf/kich_topdriver105genes.maf")
 kich_maf=read_tsv("kaz_maf/extracted_maf/kich_topdriver105genes.maf")
 kidney_maf=full_join(kirc_maf,kirp_maf)%>>%full_join(kich_maf) %>>%
   left_join(read_tsv(("maf_norm/kidney/depth/gender_file.tsv")))%>>%
   filter(!is.na(gender))%>>%
   dplyr::select(-Tumor_Sample_Barcode,-gender)
 
-coad_maf=muse_mutect_every_path("coad")%>>%mutate(cancer_type="COAD")
-write_df(coad_maf,"kaz_maf/extracted_maf/coad_topdriver105genes.maf")
+muse_mutect_every_path("coad")%>>%mutate(cancer_type="COAD") %>>%
+  write_df("kaz_maf/extracted_maf/coad_topdriver105genes.maf")
 coad_maf=read_tsv("kaz_maf/extracted_maf/coad_topdriver105genes.maf")
-read_maf=muse_mutect_every_path("read")%>>%mutate(cancer_type="READ")
-write_df(read_maf,"kaz_maf/extracted_maf/read_topdriver105genes.maf")
+muse_mutect_every_path("read")%>>%mutate(cancer_type="READ") %>>%
+  write_df("kaz_maf/extracted_maf/read_topdriver105genes.maf")
 read_maf=read_tsv("kaz_maf/extracted_maf/read_topdriver105genes.maf")
 colorectal_maf=full_join(coad_maf,read_maf)%>>%
   left_join(read_tsv(("maf_norm/colorectal/depth/gender_file.tsv")))%>>%
   filter(!is.na(gender))%>>%
   dplyr::select(-Tumor_Sample_Barcode,-gender)
 
+muse_mutect_every_path('ov')%>>%mutate(cancer_type='OV') %>>%
+  write_df("kaz_maf/extracted_maf/ov_topdriver105genes.maf")
+muse_mutect_every_path('hnsc')%>>%mutate(cancer_type='HNSC') %>>%
+  write_df("kaz_maf/extracted_maf/hnsc_topdriver105genes.maf")
+muse_mutect_every_path('prad')%>>%mutate(cancer_type='PRAD') %>>%
+  write_df("kaz_maf/extracted_maf/prad_topdriver105genes.maf")
+muse_mutect_every_path('thca')%>>%mutate(cancer_type='THCA') %>>%
+  write_df("kaz_maf/extracted_maf/thca_topdriver105genes.maf")
+muse_mutect_every_path('ucec')%>>%mutate(cancer_type='UCEC') %>>%
+  write_df("kaz_maf/extracted_maf/ucec_topdriver105genes.maf")
 
 ###########################################
 ################  1kg  ####################
