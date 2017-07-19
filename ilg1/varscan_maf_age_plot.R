@@ -131,7 +131,8 @@ cancer_type_maf=read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/cancer_typ
   mutate(cancer_type = toupper(cancer_type))
 
 norm_maf = rbind(body_part_maf%>>%select(-body_part),cancer_type_maf) %>>%
-  mutate(LOH=ifelse((soma_or_germ == "somatic" & LOH =="no" & ref != n_allele2),"back_mutation",LOH))
+  mutate(LOH=ifelse((soma_or_germ == "somatic" & LOH =="no" & ref != n_allele2),"back_mutation",LOH)) %>>%
+  mutate(cancer_type = ifelse((cancer_type=="COAD" | cancer_type=="READ"),"CRC",cancer_type))
 rm(body_part_maf,cancer_type_maf)
 
 #normalでaltalt, tumorでrefaltとなってる際にnormalでrefのdepth=0のものだけ採用！
@@ -164,7 +165,8 @@ cantype_ascat = data.frame(cancer_type = c("hnsc","ov","prad","thca","ucec")) %>
   mutate(cancer_type = toupper(cancer_type)) %>>%
   unnest()
 
-annotate_ascat=rbind(bp_ascat,cantype_ascat)
+annotate_ascat=rbind(bp_ascat,cantype_ascat)%>>%
+  mutate(cancer_type = ifelse((cancer_type=="COAD" | cancer_type=="READ"),"CRC",cancer_type))
 rm(bp_ascat,cantype_ascat)
 
 ########### CNAのdel,amp頻度のランキング(cancer type ごとに) ###########
@@ -221,6 +223,7 @@ somatic_maf = data.frame(cancer_type = c("BRCA","COAD","GBM","HNSC","KICH","KIRC
   mutate(file=paste0("kaz_maf/extracted_maf/",tolower(cancer_type),"_topdriver105genes.maf"))　%>>%
   mutate(data = purrr::map(file,~read_maf(.))) %>>%
   unnest() %>>%dplyr::select(-file) %>>%
+  mutate(cancer_type = ifelse((cancer_type=="COAD" | cancer_type=="READ"),"CRC",cancer_type)) %>>%
   (?.%>>%dplyr::count(gene_symbol,Transcript_ID)%>>%group_by(gene_symbol)%>>%filter(n() >1))
 ## ENST00000507379とENST00000300305,ENST00000610664は除く
 somatic_maf = somatic_maf %>>%
@@ -382,15 +385,15 @@ norm_maf%>>%
   dplyr::select(-n) %>>%
   left_join(annotate_ascat %>>%dplyr::count(patient_id) %>>%dplyr::select(-n)%>>% mutate(ascat_focal="ok")) %>>%
   dplyr::count(cancer_type,ascat_focal) %>>%
-#KICH=66, READ=151 so delete
-  filter(cancer_type != "KICH" & cancer_type != "READ" ) %>>%
+#KICH=66 so delete
+  filter(cancer_type != "KICH") %>>%
   (?sum(.$n))
 
 ### patient list ###
 patient_list = norm_maf %>>%
   dplyr::count(cancer_type,patient_id,age) %>>%
   dplyr::select(-n) %>>%
-  filter(cancer_type != "KICH" & cancer_type != "READ" ) %>>%
+  filter(cancer_type != "KICH") %>>%
   filter(!is.na(age))
 
 #### class 1,2のsiteのcoverage(patientごと) #########
