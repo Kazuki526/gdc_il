@@ -81,9 +81,9 @@ extract_norm_maf=function(.bp){
   .colnames = c('Hugo_Symbol','Chromosome','Start_Position','End_Position','Reference_Allele','Tumor_Seq_Allele1',
                 'Tumor_Seq_Allele2',"Match_Norm_Seq_Allele1","Match_Norm_Seq_Allele2",
                 'Consequence','PolyPhen',"cDNA_position","CDS_position","Protein_position",
-                't_depth','t_ref_count','t_alt_count','n_depth','n_ref_count','n_alt_count')
+                't_depth','t_ref_count','t_alt_count','n_depth','n_ref_count','n_alt_count','Transcript_ID')
   .cols = .colnames %>>%
-  {setNames(c('c','c','d','d','c','c', 'c','c','c', 'c','c','c','c','c', 'd','d','d','d','d','d'), .)} %>>%
+  {setNames(c('c','c','d','d','c','c', 'c','c','c', 'c','c','c','c','c', 'd','d','d','d','d','d','c'), .)} %>>%
   {do.call(readr::cols_only, as.list(.))}
   strip_maf = function(infile) {
     read_tsv(infile, comment='#', col_types=.cols) %>>%
@@ -130,10 +130,23 @@ cancer_type_maf=read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/cancer_typ
   dplyr::select(-filename) %>>%
   mutate(cancer_type = toupper(cancer_type))
 
-norm_maf = rbind(body_part_maf%>>%select(-body_part),cancer_type_maf)
+norm_maf = rbind(body_part_maf%>>%select(-body_part),cancer_type_maf) %>>%
+  mutate(LOH=ifelse((soma_or_germ == "somatic" & LOH =="no" & ref != n_allele2),"back_mutation",LOH))
 rm(body_part_maf,cancer_type_maf)
 
+#normalでaltalt, tumorでrefaltとなってる際にnormalでrefのdepth=0のものだけ採用！
+#また同じサイトでこのエラーが有意に多い(100patient以上の)siteは解析に使用しないことにした。(3site)
+varscan_error = norm_maf %>>%
+  filter(LOH == "back_mutation", n_ref_count != 0) %>>%
+  dplyr::rename(alt = n_allele2) %>>%
+  group_by(chr,start,end,ref,alt) %>>%
+  summarise(an_error = n()*2) %>>%
+  ungroup()
 
+norm_maf = norm_maf %>>%
+  filter(!(LOH == "back_mutation" & n_ref_count !=0 )) %>>%
+  left_join(varscan_error %>>% filter(an_error >=100) %>>%rename(n_allele2=alt)) %>>%
+  filter(is.na(an_error)) %>>% dplyr::select(-an_error)
 ###################################################################################################
 ########## CNA data ##########
 #ascat data
@@ -219,53 +232,19 @@ somatic_maf = somatic_maf %>>%
 somatic_ranking = somatic_maf %>>%
   tidyr::separate(CDS_position,into = c("cds_position","cds_length")) %>>%
   group_by(cancer_type,gene_symbol,mutype) %>>%
-  summarise(n=n(),cds_length=first(cds_length)) %>>%
+  summarise(n=n(),cds_length=as.double(first(cds_length))) %>>%
   left_join(driver_genes %>>%select(gene,role),by = c("gene_symbol"="gene")) %>>%
-  group_by(cancer_type,mutype) %>>%
-  mutate(rank = min_rank(desc(n)))
+  group_by(cancer_type,mutype,role) %>>%
+  mutate(somatic_rank = min_rank(desc(n/cds_length)))%>>%
+  dplyr::select(-n)
+
 
 
 ############################################################################################################
 ### read coverage files ####
-#doing by body_part
-coverage_bp = data.frame(body_part=c("breast","brain","lung","kidney","colorectal")) %>>%
-  mutate(file_path=paste0("/Volumes/areca42TB/tcga/maf_norm/",body_part,
-                          "/depth/coverage_all_data_exist_patient.tsv")) %>>%
-  mutate(data=purrr::map(file_path,~read_tsv(.,col_names = c("chr","start","an"),col_types = "cdd"))) %>>%
-  unnest() %>>%
-  group_by(chr,start) %>>%
-  summarise(an_can_bp = sum(an))
-coverage_ct = data.frame(body_part=c("hnsc","ov","prad","thca","ucec")) %>>%
-  mutate(file_path=paste0("/Volumes/areca42TB2/gdc/varscan/",body_part,
-                          "/depth/coverage_all_data_exist_patient.tsv")) %>>%
-  mutate(data=purrr::map(file_path,~read_tsv(.,col_names = c("chr","start","an"),col_types = "cdd"))) %>>%
-  unnest() %>>%
-  group_by(chr,start) %>>%
-  summarise(an_can_ct = sum(an))
+coverage_all = read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/coverage_all.tsv")
+coverage_male_x = read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/coverage_X_male.tsv")
 
-coverage_x_bp = data.frame(body_part=c("breast","brain","lung","kidney","colorectal")) %>>%
-  mutate(file_path=paste0("/Volumes/areca42TB/tcga/maf_norm/",body_part,
-                          "/depth/coverage_x_male.tsv")) %>>%
-  mutate(data=purrr::map(file_path,~read_tsv(.,col_names = c("chr","start","an"),col_types = "cdd"))) %>>%
-  unnest() %>>%
-  group_by(chr,start) %>>%
-  summarise(an_can_bp = sum(an))
-coverage_x_ct = data.frame(body_part=c("hnsc","ov","prad","thca","ucec")) %>>%
-  mutate(file_path=paste0("/Volumes/areca42TB2/gdc/varscan/",body_part,
-                          "/depth/coverage_x_male.tsv")) %>>%
-  mutate(data=purrr::map(file_path,~read_tsv(.,col_names = c("chr","start","an"),col_types = "cdd"))) %>>%
-  unnest() %>>%
-  group_by(chr,start) %>>%
-  summarise(an_can_ct = sum(an))
-
-coverage_tbl = full_join(coverage_bp,coverage_ct) %>>%
-  mutate(an_cancer = an_can_bp + an_can_ct ) %>>%
-  dplyr::select(-an_can_bp,-an_can_ct) %>>%ungroup()
-rm(coverage_bp,coverage_ct)
-coverage_x_tbl = full_join(coverage_x_bp,coverage_x_ct) %>>%
-  mutate(an_male_x_cancer = an_can_bp + an_can_ct ) %>>%
-  dplyr::select(-an_can_bp,-an_can_ct) %>>%ungroup()
-rm(coverage_x_bp,coverage_x_ct)
 
 
 ###################################################################################################################
@@ -312,11 +291,27 @@ tally_norm_maf = norm_maf %>>%
             Consequence=first(Consequence),PolyPhen=first(PolyPhen),mutype=first(mutype)) %>>%
   ungroup()
 
+#### classify each variant AF = ~0.5%(3),0.5%~5%(2),5%~(3) in AF_class colum
+classed_site = tally_norm_maf %>>%
+  left_join(vcf_exac%>>%mutate(chr=paste0("chr",chr))%>>%dplyr::rename(start=posi)) %>>%
+  mutate(AF_class = ifelse(ac_exac/an_exac > 0.05,1,ifelse(ac_exac/an_exac >0.005,2,3)))%>>%
+  mutate(AF_class = ifelse(!is.na(AF_class),AF_class,
+                           ifelse(ac_cancer >700,1,ifelse(ac_cancer>100,2,3)))) %>>%
+  filter(gene_symbol!="KMT2C") %>>%
+  left_join(driver_genes%>>%dplyr::select(gene,role),by=c("gene_symbol"="gene")) %>>%
+  ungroup()%>>%(?.%>>%dplyr::count(AF_class))
+if(0){
+##### save AF_mid_coverage_by_patient.tsv to conduct perl(make_coverage.pl) ####
+  classed_site %>>%
+    filter(AF_class==1 | AF_class==2) %>>%
+    write_df("/Volumes/areca42TB2/gdc/varscan/all_patient/AF_mid_list.tsv")
+}
 
 #######################################################################################################
 ################################filtering duplicate? position #########################################
 #######################################################################################################
-
+###目で見た結果　明らかにおかしくて除くべきsiteはなかった。
+if(0){
 ### HWE test ###
 HWE_test=function(AF,homo,hetero,an){
   .hw=c(AF^2,2*AF*(1-AF),1-(AF^2)-(2*AF*(1-AF)))
@@ -332,7 +327,11 @@ do_HWE = function(.data){
 ##### chrX以外 #####
 error_site = tally_norm_maf%>>%
   filter(chr != "chrX") %>>%
-  left_join(coverage_tbl %>>% mutate(chr=paste0("chr",chr))) %>>% 
+  left_join(varscan_error) %>>% mutate(an_error = ifelse(is.na(an_error),0,an_error)) %>>%
+  mutate(start = ifelse(alt == "-",start -1,start)) %>>%
+  left_join(coverage_all ) %>>% 
+  mutate(an_cancer =an_cancer - an_error) %>>%
+  dplyr::select(-an_error) %>>%
   mutate(hetero_cancer = ac_cancer - homo_cancer*2) %>>%
   nest(-chr,-start,-ref,-alt) %>>%
   mutate(HWE=purrr::map(data,~do_HWE(.))) %>>%
@@ -354,9 +353,9 @@ x_error_site = norm_maf %>>%
   summarise(ac_cancer=n(),homo_cancer=sum(homo)/2,gene_symbol=first(gene_symbol),
             Consequence=first(Consequence),PolyPhen=first(PolyPhen),mutype=first(mutype)) %>>%
   ungroup() %>>%
-  left_join(coverage_tbl %>>% mutate(chr=paste0("chr",chr))) %>>%
-  left_join(coverage_x_tbl ) %>>%
-  mutate(an_cancer = an_cancer - an_male_x_cancer) %>>%
+  left_join(coverage_all) %>>%
+  left_join(coverage_male_x ) %>>%
+  mutate(an_cancer = an_cancer - an_male_cancer) %>>%
   mutate(hetero_cancer = ac_cancer - homo_cancer*2) %>>%
   nest(-chr,-start,-ref,-alt) %>>%
   mutate(HWE=purrr::map(data,~do_HWE(.))) %>>%
@@ -373,7 +372,7 @@ tally_norm_maf %>>%
 
 error_site %>>%
   filter( HWE <1E-100) %>>%View
-  
+}
   
 
 #####################################################################################################################
@@ -387,24 +386,7 @@ norm_maf%>>%
   filter(cancer_type != "KICH" & cancer_type != "READ" ) %>>%
   (?sum(.$n))
 
-
-
-
-####################################################################################################################
-#### classify each variant AF = ~0.5%(3),0.5%~5%(2),5%~(3) in AF_class colum
-classed_site = tally_norm_maf %>>%
-  left_join(vcf_exac%>>%mutate(chr=paste0("chr",chr))%>>%dplyr::rename(start=posi)) %>>%
-  mutate(AF_class = ifelse(ac_exac/an_exac > 0.05,1,ifelse(ac_exac/an_exac >0.005,2,3)))%>>%
-  mutate(AF_class = ifelse(!is.na(AF_class),AF_class,
-                           ifelse(ac_cancer >700,1,ifelse(ac_cancer>100,2,3)))) %>>%
-  filter(gene_symbol!="KMT2C") %>>%
-  left_join(driver_genes%>>%dplyr::select(gene,role),by=c("gene_symbol"="gene")) %>>%
-  ungroup()%>>%(?.%>>%dplyr::count(AF_class))
-if(0){
-  classed_site %>>%
-    filter(AF_class==1 | AF_class==2) %>>%View()
-}
-
+### patient list ###
 patient_list = norm_maf %>>%
   dplyr::count(cancer_type,patient_id,age) %>>%
   dplyr::select(-n) %>>%
@@ -438,9 +420,9 @@ class1_plot = function(.data,.cancer_type){
     geom_text(data = .mean_age,aes(x=genotype,y=120,label=mean),size=2,position = "stack",color="red")
 }
 
-################################################
-### siteごとにgenotypeで発症年齢の上下を見る ###
-################################################
+#####################################################
+##### siteごとにgenotypeで発症年齢の上下を見る ######
+#####################################################
 ## all patient ###(AF_class == 1か2にしてclassを変える)
 .plot = classed_site %>>%
   filter(mutype!="silent",AF_class == 2,role == "TSG") %>>%
@@ -455,7 +437,6 @@ class1_plot = function(.data,.cancer_type){
          genotype_order = ifelse(genotype=="refref",1,ifelse(genotype=="refalt",2,3))) %>>%
   class1_plot("all")
 ggsave("age_plot/class2_all.pdf",.plot,width = 10,height = 15)
-rm(.plot)
 
 ## plot by cancer_type ##(同じくAF_class == 1か2に変える)
 class1_bycancertype_plot = function(.data){
@@ -496,7 +477,7 @@ class23_plot = function(.site_tbl, .title){
   }
   nofilter = norm_maf %>>%
     left_join(.site_tbl %>>%dplyr::rename(n_allele2 = alt)) %>>%
-    filter(!is.na(AF_class)) %>>%
+    filter(!is.na(AF_class),!(soma_or_germ=="somatic" & LOH=="no")) %>>%
     mutate(PolyPhen=str_extract(PolyPhen,"^\\w+")) %>>%
     mutate(mutation_type = ifelse(mutype=="truncating",mutype,PolyPhen))%>>%
     mutate(mutation_type = ifelse(str_detect(mutation_type,"damaging"),"damaging",mutation_type)) %>>%
@@ -520,7 +501,7 @@ class23_plot = function(.site_tbl, .title){
       geom_violin()+
       geom_boxplot(width=.3,fill="black")+ 
       stat_summary(fun.y=mean,geom = "point", fill="white",shape=21,size=2)+
-      facet_wrap(~ cancer_type,ncol=4)+
+      facet_wrap(~ cancer_type,ncol=5)+
       ylim(0,120)+
       geom_signif(aes(x=reorder(mutation_type,mutation_type_order),y=age),
                   comparisons = list(c("truncating","none")),
@@ -541,6 +522,8 @@ class23_plot = function(.site_tbl, .title){
     left_join(driver_genes %>>%filter(role=="TSG") %>>%dplyr::rename(gene_symbol=gene)%>>%
                 mutate(patient_focal="focal") %>>%dplyr::select(gene_symbol,patient_focal))%>>%
     dplyr::select(-patient_focal) %>>%
+    left_join(somatic_ranking %>>%filter(mutype=="missense")) %>>%filter(somatic_rank <=10) %>>%
+    #left_join(cna_del_rank) %>>%filter(loh_rank <= 30) %>>%
     left_join(nofilter) %>>%
     mutate(mutation_type = ifelse(is.na(mutation_type),"none",mutation_type),
            age=round(age/365.25*100)/100) %>>%
@@ -552,19 +535,21 @@ class23_plot = function(.site_tbl, .title){
     {ggsave(paste0("age_plot/",.title,".pdf"), width = 15, height = 15)}
 }
 
-### all class2,3 missense_or_truncate
-classed_site %>>% 
-  filter(AF_class==2|AF_class==3)%>>%
-  filter(mutype=="truncating"|mutype=="missense") %>>%
-  class23_plot("class23_missense_or_truncate")
-
 ### all class3 missense or truncate
 classed_site %>>% 
   filter(AF_class==3)%>>%
   filter(mutype=="truncating"|mutype=="missense") %>>%
+  class23_plot("class3_filter/somatic10")
   class23_plot("class3_missense_or_truncate")
 
-
+  
+### all class2,3 missense_or_truncate
+classed_site %>>% 
+  filter(AF_class==2|AF_class==3)%>>%
+  filter(mutype=="truncating"|mutype=="missense") %>>%
+  class23_plot("class23_missense_or_truncate_loh20")
+  
+  
 ##################################################################################################
 ####################################### siteごとに発症年齢分布 ###################################
 ##################################################################################################
@@ -650,4 +635,76 @@ mean_age = patient_list %>>%group_by(cancer_type) %>>%summarise(age=round(mean(a
   geom_hline(data = mean_age, aes(yintercept = age))
 .plot
 ggsave("age_plot/class3_signtest_byCT.pdf",.plot,height = 15,width = 15)
+
+
+####################################################################################################################
+######### cumulative mutation effect ##########
+#まずtruncateを２つ以上もつ患者いる？？
+truncating_count = norm_maf %>>%
+  filter(!(soma_or_germ =="somatic" & LOH=="no"),gene_symbol!="KMT2C",
+         cancer_type!="READ",cancer_type!="KICH") %>>%
+  left_join(driver_genes %>>%dplyr::select(gene,role),by=c("gene_symbol"="gene")) %>>%
+  filter(mutype=="truncating",role=="TSG") %>>%
+  count(cancer_type,patient_id,gene_symbol) %>>% dplyr::select(-n)%>>%
+  group_by(cancer_type,patient_id) %>>%summarise(truncating_count=n())
+
+#truncateの数だけでは？？
+.plot = patient_list %>>%
+  left_join(truncating_count) %>>%
+  mutate(truncating_count=ifelse(is.na(truncating_count),0,truncating_count),
+         age=round(age/365.25*100)/100) %>>%
+  ggplot(aes(x=as.factor(truncating_count), y=age))+
+  geom_violin()+
+  geom_boxplot(width=.3,fill="black")+ 
+  stat_summary(fun.y=mean,geom = "point", fill="white",shape=21,size=2)+
+  facet_wrap( ~ cancer_type, ncol = 5)+
+  ylim(0,90)+
+  geom_text(data =truncating_count %>>%count(cancer_type,truncating_count),
+            aes(x=as.factor(truncating_count),y=5,label=n),size=3,position="stack")
+.plot
+ggsave("age_plot/cumulative/allgene_truncating.pdf",.plot,height = 15,width = 15)
+#遺伝子絞らないとな、、、、
+
+##missense の数
+missense_count = classed_site %>>%
+  filter(AF_class ==3,mutype=="missense") %>>%
+  rename(n_allele2=alt) %>>%
+  left_join(norm_maf %>>%filter(mutype=="missense",!(soma_or_germ =="somatic" & LOH=="no"),
+                                cancer_type!="READ",cancer_type!="KICH")) %>>%
+  #left_join(cna_del_rank) %>>%filter(del_rank <40) %>>%
+  group_by(cancer_type,patient_id) %>>%
+  summarise(missense_num=n()) %>>%
+  mutate(missense_count=as.character(ifelse(missense_num >= 10,"10-",missense_num)),
+         missense_count_order=ifelse(missense_num >=10,10,missense_num))
+
+.plot = patient_list %>>%
+  left_join(missense_count) %>>%
+  mutate(missense_count = ifelse(is.na(missense_count),"0",missense_count),
+         missense_count_order = ifelse(is.na(missense_count_order),0,missense_count_order),
+         age=round(age/365.25*100)/100) %>>%
+  left_join(truncating_count) %>>%
+  mutate(truncating=ifelse(is.na(truncating_count),"not_have_truncating","have_truncating")) %>>%
+  filter(truncating=="not_have_truncating") %>>%
+  ggplot(aes(x=reorder(missense_count,missense_count_order), y=age))+
+  geom_violin()+
+  geom_boxplot(width=.3,fill="black")+ 
+  stat_summary(fun.y=mean,geom = "point", fill="white",shape=21,size=2)+
+  facet_wrap( ~ cancer_type, ncol = 5)+
+  ylim(0,90)+
+  geom_text(data =missense_count %>>%count(cancer_type,missense_count),
+            aes(x=missense_count,y=5,label=n),size=3,position="stack")+
+  theme(strip.text = element_text(size=6),axis.text.x = element_text(angle = -45, hjust = 0))
+.plot
+ggsave("age_plot/cumulative/allgene_missense.pdf",.plot,height = 15,width = 15)
+
+
+
+write_df(norm_maf,"norm_maf")
+write_df(somatic_maf,"somatic.maf.gz")
+write_df(varscan_error,"varscan_error")
+write_df(norm_maf,"norm.maf.gz")
+write_df(vcf_exac,"vcf_exac.gz")
+write_df(annotate_ascat,"ascat.gz")
+write_df(driver_genes,"driver_genes.tsv")
+write_df(topdriver_bed,"driver.bed")
 
