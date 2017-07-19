@@ -373,7 +373,7 @@ tally_norm_maf %>>%
 error_site %>>%
   filter( HWE <1E-100) %>>%View
 }
-  
+#特になさそう、、、
 
 #####################################################################################################################
 #### patient number ####
@@ -392,6 +392,13 @@ patient_list = norm_maf %>>%
   dplyr::select(-n) %>>%
   filter(cancer_type != "KICH" & cancer_type != "READ" ) %>>%
   filter(!is.na(age))
+
+#### class 1,2のsiteのcoverage(patientごと) #########
+mid_af_coverage =read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/AF_mid_coverage_by_patient.tsv") %>>%
+  left_join(varscan_error %>>%filter(an_error > 100) %>>%dplyr::select(chr,start,an_error)) %>>%
+  filter(!is.na(an_error)) %>>%
+  dplyr::select(-an_error)
+
 
 
 ##########################################
@@ -461,6 +468,9 @@ ggsave("age_plot/class2_by_cancer_type.pdf",
        gridExtra::marrangeGrob(.plot_byCT$plot,nrow = 1,ncol = 1,top = NULL),
        height = 15, width = 10)
 rm(.plot_byCT)
+
+
+
 ##########################################
 ######### AF <5% site(class 2,3) #########
 ##########################################
@@ -698,13 +708,22 @@ missense_count = classed_site %>>%
 ggsave("age_plot/cumulative/allgene_missense.pdf",.plot,height = 15,width = 15)
 
 
-
-write_df(norm_maf,"norm_maf")
-write_df(somatic_maf,"somatic.maf.gz")
-write_df(varscan_error,"varscan_error")
-write_df(norm_maf,"norm.maf.gz")
-write_df(vcf_exac,"vcf_exac.gz")
-write_df(annotate_ascat,"ascat.gz")
-write_df(driver_genes,"driver_genes.tsv")
-write_df(topdriver_bed,"driver.bed")
+###################################################################################################################
+setwd("~/Dropbox/install/tvz/temporary/")
+#write_df(somatic_maf,"somatic.maf.gz")
+#write_df(varscan_error,"varscan_error")
+#write_df(norm_maf,"norm.maf.gz")
+#write_df(vcf_exac,"vcf_exac.gz")
+#write_df(annotate_ascat,"ascat.gz")
+#write_df(driver_genes,"driver_genes.tsv")
+#write_df(topdriver_bed,"driver.bed")
+#write_df(mid_af_coverage,"AF_mid_coverage_by_patient.tsv.gz")
+norm_maf = read_tsv("norm_maf.gz")
+varscan_error = read_tsv("varscan_error")
+somatic_maf = read_tsv("somatic.maf.gz")
+vcf_exac = read_tsv("vcf_exac.gz")
+annotate_ascat = read_tsv("ascat.gz")
+driver_genes = read_tsv("driver_genes.tsv")
+topdriver_bed = read_tsv("driver.bed")
+mid_af_coverage = read_tsv("AF_mid_coverage_by_patient.tsv.gz")
 
