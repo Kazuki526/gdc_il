@@ -25,46 +25,46 @@ write_df= function(x, path, delim='\t', na='NA', append=FALSE, col_names=!append
                      append=append, quote=FALSE, sep=delim, na=na,
                      row.names=FALSE, col.names=col_names)
 }
-topdriver_bed=read_tsv("/Volumes/areca42TB/tcga/maf_norm/top_driver105.bed",col_names = c("chr","gene_start","gene_end","ids","score","strand"))%>>%
+topdriver_bed=read_tsv("/Volumes/areca42TB/tcga/maf_norm/top_driver105.bed",
+                       col_names = c("chr","gene_start","gene_end","ids","score","strand"))%>>%
   tidyr::separate(ids,c("gene_symbol","ensg"),sep=";")
 classify_consequence = function(.data) {
-  dplyr::mutate(.data, mutype= dplyr::recode(Consequence,
-                                             downstream_gene_variant = 'flank',
-                                             `3_prime_UTR_variant` = 'flank',
-                                             upstream_gene_variant = 'flank',
-                                             `5_prime_UTR_variant` = 'flank',
-                                             frameshift_variant = 'truncating',
-                                             frameshift_variant = 'truncating',
-                                             inframe_deletion = 'inframe_indel',
-                                             inframe_insertion = 'inframe_indel',
-                                             intron_variant = 'silent',
-                                             splice_region_variant = 'splice',
-                                             coding_sequence_variant = 'missense',
-                                             missense_variant = 'missense',
-                                             stop_gained = 'truncating',
-                                             stop_lost = 'truncating',
-                                             stop_retained_variant = 'silent',
-                                             synonymous_variant = 'silent',
-                                             splice_acceptor_variant = 'splice',
-                                             splice_donor_variant = 'splice',
-                                             protein_altering_variant = 'inframe_indel',
-                                             start_lost = 'truncating',
-                                             `splice_region_variant,intron_variant` = 'splice',
-                                             `stop_gained,frameshift_variant` = 'truncating',
-                                             `splice_region_variant,synonymous_variant`='splice',
-                                             `splice_region_variant,5_prime_UTR_variant`='splice',
-                                             `missense_variant,splice_region_variant`='missense',
-                                             `intron_variant,non_coding_transcript_variant`='silent',
-                                             `non_coding_transcript_exon_variant,non_coding_transcript_variant`='silent',
-                                             `splice_region_variant,3_prime_UTR_variant`='flank',
-                                             `stop_gained,splice_region_variant`='truncating',
-                                             `stop_gained,protein_altering_variant`='truncating',
-                                             `frameshift_variant,splice_region_variant`='truncating',
-                                             `inframe_deletion,splice_region_variant`='splice',
-                                             `splice_acceptor_variant,intron_variant`='splice',
-                                             `splice_donor_variant,coding_sequence_variant,intron_variant`='splice',
-                                             `stop_gained,inframe_deletion`='truncating',
-                                             `stop_gained,inframe_insertion`='truncating'))
+  mutate(.data,
+         mutype= dplyr::recode(Consequence,
+                               downstream_gene_variant = 'flank',
+                               `3_prime_UTR_variant` = 'flank',
+                               upstream_gene_variant = 'flank',
+                               `5_prime_UTR_variant` = 'flank',
+                               frameshift_variant = 'truncating',
+                               frameshift_variant = 'truncating',
+                               inframe_deletion = 'inframe_indel',
+                               inframe_insertion = 'inframe_indel',
+                               intron_variant = 'silent',
+                               splice_region_variant = 'splice',
+                               coding_sequence_variant = 'missense',
+                               missense_variant = 'missense',
+                               stop_gained = 'truncating',
+                               stop_lost = 'truncating',
+                               stop_retained_variant = 'silent',
+                               synonymous_variant = 'silent',
+                               splice_acceptor_variant = 'splice',
+                               splice_donor_variant = 'splice',
+                               protein_altering_variant = 'inframe_indel',
+                               start_lost = 'truncating',
+                               `splice_region_variant,intron_variant` = 'splice',
+                               `stop_gained,frameshift_variant` = 'truncating',
+                               `missense_variant,splice_region_variant`='missense',
+                               `intron_variant,non_coding_transcript_variant`='silent',
+                               `non_coding_transcript_exon_variant,non_coding_transcript_variant`='silent',
+                               `splice_region_variant,3_prime_UTR_variant`='flank',
+                               `stop_gained,splice_region_variant`='truncating',
+                               `stop_gained,protein_altering_variant`='truncating',
+                               `frameshift_variant,splice_region_variant`='truncating',
+                               `inframe_deletion,splice_region_variant`='splice',
+                               `splice_acceptor_variant,intron_variant`='splice',
+                               `splice_donor_variant,coding_sequence_variant,intron_variant`='splice',
+                               `stop_gained,inframe_deletion`='truncating',
+                               `stop_gained,inframe_insertion`='truncating'))
 }
 driver_genes=read_tsv("~/git/driver_genes/driver_genes.tsv")%>>%
   filter(refs>3) %>>%
@@ -721,7 +721,7 @@ setwd("~/Dropbox/install/tvz/temporary/")
 #write_df(driver_genes,"driver_genes.tsv")
 #write_df(topdriver_bed,"driver.bed")
 #write_df(mid_af_coverage,"AF_mid_coverage_by_patient.tsv.gz")
-norm_maf = read_tsv("norm_maf.gz")
+norm_maf = read_tsv("norm.maf.gz")
 varscan_error = read_tsv("varscan_error")
 somatic_maf = read_tsv("somatic.maf.gz")
 vcf_exac = read_tsv("vcf_exac.gz")
