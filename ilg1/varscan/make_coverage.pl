@@ -126,16 +126,16 @@ sub main ( $ ){
 								}
 						}else{
 								for(my $i=2;@line>$i;$i++){
-										if((grep{$_ eq $i}@male)&&($line[$i] >=6)&&(defined $dp_focal{$line[0]}{$line[1]}{$dpcolum[$i]})){
+										if((grep{$_ eq $i}@male)&&($line[$i] >=8)&&(defined $dp_focal{$line[0]}{$line[1]}{$dpcolum[$i]})){
 												$dp_focal{$dpcolum[$i]}{$line[0]}{$line[1]}{tumor}="ok";
 												$coverage{$line[0]}{$line[1]}++;
 												$coverage_xmale{$line[1]}++;
-										}elsif((!grep{$_ eq $i}@male)&&($line[$i] >=6)&&(defined $dp_focal{$line[0]}{$line[1]}{$dpcolum[$i]})){
+										}elsif((!grep{$_ eq $i}@male)&&($line[$i] >=8)&&(defined $dp_focal{$line[0]}{$line[1]}{$dpcolum[$i]})){
 												$dp_focal{$dpcolum[$i]}{$line[0]}{$line[1]}{tumor}="ok";
 												$coverage{$line[0]}{$line[1]}+=2;
 										}
 										if(defined $mid_af{"chr$line[0]"}{$line[1]}){
-												if(($line[$i] >=6)&&(defined $dp_focal{$line[0]}{$line[1]}{$dpcolum[$i]})){
+												if(($line[$i] >=8)&&(defined $dp_focal{$line[0]}{$line[1]}{$dpcolum[$i]})){
 														print OUTS "$dpcolum[$i]\t$patient{$dpcolum[$i]}{age}\t$patient{$dpcolum[$i]}{gender}\tchr$line[0]\t$line[1]\tok\n";
 												}else{
 														print OUTS "$dpcolum[$i]\t$patient{$dpcolum[$i]}{age}\t$patient{$dpcolum[$i]}{gender}\tchr$line[0]\t$line[1]\tno\n";
