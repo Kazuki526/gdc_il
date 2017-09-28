@@ -62,6 +62,7 @@ classify_consequence = function(.data) {
                                `frameshift_variant,stop_lost`='truncating',
                                `inframe_deletion,splice_region_variant`='splice_region',
                                `inframe_insertion,splice_region_variant`='splice_region',
+                               `frameshift_variant,stop_lost,splice_region_variant`='truncating',
                                `protein_altering_variant,splice_region_variant`='inframe_indel',
                                `splice_acceptor_variant,intron_variant`='splice',
                                `splice_acceptor_variant,coding_sequence_variant`='splice',
@@ -69,12 +70,15 @@ classify_consequence = function(.data) {
                                `splice_donor_variant,coding_sequence_variant`='splice',
                                `splice_donor_variant,coding_sequence_variant,intron_variant`='splice',
                                `splice_donor_variant,intron_variant`='splice',
+                               `splice_donor_variant,3_prime_UTR_variant,intron_variant`='flank',
                                `splice_region_variant,5_prime_UTR_variant`='flank',
                                `splice_region_variant,3_prime_UTR_variant`='flank',
                                `splice_region_variant,intron_variant` = 'splice_region',
                                `splice_region_variant,synonymous_variant`='silent',
                                `start_lost,inframe_deletion`='truncating',
+                               `stop_lost,inframe_deletion`='truncating',
                                `stop_gained,protein_altering_variant`='truncating',
+                               `stop_gained,frameshift_variant,splice_region_variant`='truncating',
                                `stop_gained,inframe_deletion`='truncating',
                                `stop_gained,inframe_insertion`='truncating',
                                `stop_gained,splice_region_variant`='truncating'))
@@ -147,46 +151,44 @@ body_part_maf=read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/body_part_al
   left_join(all_patient_info %>>%dplyr::select(patient_id,cancer_type))
 
 cancer_type_maf=read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/cancer_type_all.maf.gz") %>>%
- #filter(mutype!="flank",mutype!="splice_region") %>>%
+  filter(mutype!="flank",mutype!="splice_region") %>>%
   filter(Consequence!="intron_variant") %>>%
   filter(Consequence!="intron_variant,non_coding_transcript_variant") %>>%
   dplyr::select(-filename) %>>%
   mutate(cancer_type = toupper(cancer_type))
 
-norm_maf = rbind(body_part_maf%>>%select(-body_part),cancer_type_maf) %>>%
+norm_maf_all = rbind(body_part_maf%>>%select(-body_part),cancer_type_maf) %>>%
   mutate(LOH=ifelse((soma_or_germ == "somatic" & LOH =="no" & ref != n_allele2),"back_mutation",LOH)) %>>%
-  mutate(cancer_type = ifelse((cancer_type=="COAD" | cancer_type=="READ"),"CRC",cancer_type))
+  mutate(cancer_type = ifelse((cancer_type=="COAD" | cancer_type=="READ"),"CRC",cancer_type))%>>%
+  mutate(cancer_type = ifelse((cancer_type=="KIRC" | cancer_type=="KIRP" | cancer_type=="KICH"),"KCC",cancer_type))
 rm(body_part_maf,cancer_type_maf)
 
 #normalでaltalt, tumorでrefaltとなってる際にnormalでrefのdepth=0のものだけ採用！
 #また同じサイトでこのエラーが有意に多い(100patient以上の)siteは解析に使用しないことにした。(3site)
-varscan_error = norm_maf %>>%
+varscan_error = norm_maf_all %>>%
   filter(LOH == "back_mutation", n_ref_count != 0) %>>%
   dplyr::rename(alt = n_allele2) %>>%
   group_by(chr,start,end,ref,alt) %>>%
   summarise(an_error = n()*2) %>>%
   ungroup()
 
-norm_maf = norm_maf %>>%
+norm_maf = norm_maf_all %>>%
   filter(!(LOH == "back_mutation" & n_ref_count !=0 )) %>>%
   left_join(varscan_error %>>% filter(an_error >=100) %>>%rename(n_allele2=alt)) %>>%
   filter(is.na(an_error)) %>>% dplyr::select(-an_error)
 
 ##### somaticでrecurrentなmutationはgermで起こっているとは考えにくい（様々なエラーが考えられる）
 #いちおうEXACでAF>1%となっているsiteはこれに含めない
-somatic_recurrent = norm_maf%>>%
+somatic_recurrent = norm_maf_all%>>%
   filter(soma_or_germ=="somatic",LOH=="no")%>>%
   count(gene_symbol,chr,start,end,ref,t_allele2)%>>%
   dplyr::rename(alt=t_allele2)%>>%
-  filter(n>10)%>>%
-  left_join(vcf_exac)%>>%
-  filter(ac_exac < an_exac*0.01)%>>%
-  dplyr::select(-ac_exac,-an_exac)
+  filter(n>10)
 #### この領域を取り除くのはduplicate領域を取り除いてからにするのでもっと下の方でやっている。
 
 
 tally_norm_maf = norm_maf %>>%
-  filter(cancer_type != "KICH") %>>%
+  #filter(cancer_type != "KICH") %>>%
   filter(!(soma_or_germ=="somatic" & LOH=="no")) %>>%
   tidyr::gather(allele,alt,n_allele1,n_allele2) %>>%
   filter(ref != alt)%>>%
@@ -278,7 +280,6 @@ do_HWE = function(.data){
 error_site = tally_norm_maf%>>%
   filter(chr != "chrX") %>>%
   left_join(varscan_error) %>>% mutate(an_error = ifelse(is.na(an_error),0,an_error)) %>>%
-  mutate(start = ifelse(alt == "-",start -1,start)) %>>%
   left_join(coverage_all ) %>>%
   filter(!is.na(an_cancer)) %>>%
   mutate(an_cancer =an_cancer - an_error) %>>%
@@ -297,7 +298,6 @@ write_df(error_site,"/Volumes/areca42TB2/gdc/varscan/all_patient/duplicated_erro
 tally_norm_maf%>>%
   filter(chr != "chrX") %>>%
   left_join(varscan_error) %>>% mutate(an_error = ifelse(is.na(an_error),0,an_error)) %>>%
-  mutate(start = ifelse(alt == "-",start -1,start)) %>>%
   left_join(coverage_all ) %>>%
   filter(!is.na(an_cancer)) %>>%
   mutate(an_cancer =an_cancer - an_error) %>>%
@@ -326,7 +326,7 @@ remove_duplicate = function(.maf){
     filter(!(start >= error_start & end <= error_end)|is.na(error_start)) %>>%
     dplyr::select(-error_start,-error_end)
 }
-
+#duplicateしていそうなところと一緒にsomatic recurrent も取り除く
 norm_maf = norm_maf %>>%
   left_join(somatic_recurrent%>>%dplyr::rename(n_allele2=alt))%>>%
   filter(is.na(n)) %>>%dplyr::select(-n)%>>%
@@ -346,14 +346,14 @@ norm_maf%>>%
   left_join(annotate_ascat %>>%dplyr::count(patient_id) %>>%dplyr::select(-n)%>>% mutate(ascat_focal="ok")) %>>%
   dplyr::count(cancer_type,ascat_focal) %>>%
   #KICH=66 so delete
-  filter(cancer_type != "KICH") %>>%
+  #filter(cancer_type != "KICH") %>>%
   (?sum(.$n))
 
 ### patient list ###
 patient_list = norm_maf %>>%
   dplyr::count(cancer_type,patient_id,age) %>>%
   dplyr::select(-n) %>>%
-  filter(cancer_type != "KICH") %>>%
+  #filter(cancer_type != "KICH") %>>%
   filter(!is.na(age))
 
 
