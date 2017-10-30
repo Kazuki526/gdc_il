@@ -15,7 +15,7 @@ map{push(@info_an,"AN_".$_)}qw(AFR AMR EAS FIN NFE OTH SAS);
 my @chr=qw(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X);
 
 open (OUTV,">/Volumes/cancer/exac/exac_nontcga_liftovered.vcf");
-open (OUTT,"|gzip -c >/Volumes/cancer/exac/exac/nontcga_liftovered_checked_likevcf.tsv.gz");
+open (OUTT,"|gzip -c >/Volumes/cancer/exac/nontcga_liftovered_checked_likevcf.tsv.gz");
 print OUTT "chr\tstart\tref\talt\t".join("\t",(@info_ac,@info_an))."\n";
 foreach my $chr (@chr){
 		print "liftover $chr\n";
@@ -24,7 +24,7 @@ foreach my $chr (@chr){
 		open (IN,"gunzip -c /Volumes/cancer/exac/before_liftover/$chr.vcf.gz|");
 		while(<IN>){
 				if($_=~/^#/){
-						if($chr eq "1"){print OUT "$_";}
+						if($chr eq "1"){print OUTV "$_";}
 						next;
 				}else{
 						chomp;
@@ -45,7 +45,7 @@ foreach my $chr (@chr){
 										for(my $i=0;@alt>$i;$i++){
 												my @info_out=();my @info_tsv=();
 												map{my@inf_ac=split(/,/,$INFO{$_});push(@info_out,"$_=$inf_ac[$i]");push(@info_tsv,$inf_ac[$i])}@info_ac;
-												map{push(@info_out,"$_=$INFO{$_}");push(@info_tsv,$INFO[$i])}@info_an;
+												map{push(@info_out,"$_=$INFO{$_}");push(@info_tsv,$INFO{$_})}@info_an;
 												print OUTV "$chr\t$pos\t$line[2]\t$line[3]\t$alt[$i]\t$line[5]\t$line[6]\t".join(";",@info_out)."\n";
 												print OUTT "$chr\t$pos\t$line[3]\t$alt[$i]\t".join("\t",@info_tsv)."\n";
 										}
@@ -61,7 +61,7 @@ foreach my $chr (@chr){
 												if($alt[$i] ne $refseq){
 														my @info_out=();my @info_tsv=();
 														map{my@inf_ac=split(/,/,$INFO{$_});push(@info_out,"$_=$inf_ac[$i]");push(@info_tsv,$inf_ac[$i])}@info_ac;
-														map{push(@info_out,"$_=$INFO{$_}");push(@info_tsv,$INFO[$i])}@info_an;
+														map{push(@info_out,"$_=$INFO{$_}");push(@info_tsv,$INFO{$_})}@info_an;
 														print OUTV "$chr\t$pos\t$line[2]\t$refseq\t$alt[$i]\t$line[5]\t$line[6]\t".join(";",@info_out)."\n";
 														print OUTT "$chr\t$pos\t$refseq\t$alt[$i]\t".join("\t",@info_tsv)."\n";
 												}
@@ -75,7 +75,7 @@ foreach my $chr (@chr){
 														push(@info_tsv,("NA","NA"));
 												}
 										}
-										map{push(@info_tsv,$INFO[$i])}@info_an;
+										map{push(@info_tsv,$INFO{$_})}@info_an;
 										my $t=0;
 										my @info_out=();
 										foreach my $inf((@info_ac,@info_an)){
@@ -95,7 +95,7 @@ foreach my $chr (@chr){
 														push(@info_tsv,("NA","NA"));
 												}
 										}
-										map{push(@info_tsv,$INFO[$i])}@info_an;
+										map{push(@info_tsv,$INFO{$_})}@info_an;
 										my $t=0;
 										my @info_out=();
 										foreach my $inf((@info_ac,@info_an)){
@@ -110,14 +110,14 @@ foreach my $chr (@chr){
 		}
 		close IN;
 }
-close OUTV;close OUTT
+close OUTV;close OUTT;
 
 
 
 
 open (OUTV,">/Volumes/cancer/exac/exac_nontcga_liftovered_indel.vcf");
 open (ERR,"|gzip -c >/Volumes/cancer/exac/exac_nontcga_liftovererror_indel.vcf.gz");
-open (OUTT,"|gzip -c >/Volumes/cancer/exac/exac/nontcga_liftovered_checked_likevcf_indel.tsv.gz");
+open (OUTT,"|gzip -c >/Volumes/cancer/exac/nontcga_liftovered_checked_likevcf_indel.tsv.gz");
 print OUTT "chr\tstart\tref\talt\t".join("\t",(@info_ac,@info_an))."\n";
 foreach my $chr (@chr){
 		print "liftover $chr\n";
@@ -126,13 +126,13 @@ foreach my $chr (@chr){
 		open (IN,"gunzip -c /Volumes/cancer/exac/before_liftover_indel/$chr.vcf.gz|");
 		while(<IN>){
 				if($_=~/^#/){
-						if($chr eq "1"){print OUT "$_";}
+						if($chr eq "1"){print OUTV "$_";}
 						next;
 				}else{
 						chomp;
 						my @line=split(/\t/,);
 						my %INFO=map{my@inf=split(/=/,);($inf[0],$inf[1])}split(/;/,$line[7]);
-						my ($chr,$pos,$end_pos,$refseq);
+						my ($chr,$pos,$end_pos);
 						my $end=$line[1]+length($line[3]);
 						if($remap{"$line[0]:$line[1]-$end"} and $remap{"$line[0]:$line[1]-$end"}=~ /^([^:]+):(\d+)-(\d+)$/){
 								($chr,$pos,$end_pos)=($1,$2,$3 - 1);
