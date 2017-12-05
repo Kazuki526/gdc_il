@@ -27,14 +27,14 @@ my $ref="/Volumes/areca42TB/GRCh38.d1.vd1.fa.gz";
 (-e $ref)or die "ERROR:not exist ref fasta:$ref\n";
 
 #check top driver 105genes bed file exist?
-my $bed="/Users/kaz/git/gdc_il/ilg1/varscan/control_gene_region/.json";
+my $bed="$ENV{HOME}/git/gdc_il/ilg1/varscan/control_gene_region/.json";
 #(-e $bed) or die "ERROR:not exist bed file:$bed\n";
 
 #check existing bamslicing.pl
-my $download_pl="/Users/kaz/git/gdc_il/ilg1/download/bamslicing.pl";
+my $download_pl="$ENV{HOME}/git/gdc_il/ilg1/download/bamslicing.pl";
 (-e $download_pl) or die "ERROR::download script $download_pl is not exist!!\n";
 #check existing sample_bam.json
-my $sample_json="/Users/kaz/git/gdc_il/ilg1/varscan/control_gene_region/sample_bam.json";
+my $sample_json="$ENV{HOME}/git/gdc_il/ilg1/varscan/control_gene_region/sample_bam.json";
 (-e $sample_json) or die "ERROR::$sample_json exist??";
 
 mkdir "$project_dir";
