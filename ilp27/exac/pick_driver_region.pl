@@ -112,8 +112,8 @@ while(<VCF>){
 										}
 								}
 								if($ref_snp ne ""){
-										print OUTV "$line[0]\t$ref_snp\t.\t".join(",",@alt_snp)."\t$line[4]\t$line[5]\t";
-										my @info_out="";
+										print OUTV "$line[0]\t$line[1]\t.\t$ref_snp\t".join(",",@alt_snp)."\t$line[5]\t$line[6]\t";
+										my @info_out=();
 										map{push(@info_out,"$_=$ac_out{$_}")}@info_ac;
 										map{push(@info_out,"$_=$INFO{$_}")}@info_an;
 										print OUTV join(";",@info_out)."\n";
