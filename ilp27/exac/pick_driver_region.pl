@@ -76,10 +76,10 @@ while(<VCF>){
 												foreach my $inf(@info_ac){
 														if(defined $ac_out{$inf}){
 																my @inf_ac=split(/,/,$INFO{$inf});
-																$ac_out{$inf}=$inf_ac[$i];
+																$ac_out{$inf}.=",$inf_ac[$i]";
 														}else{
 																my @inf_ac=split(/,/,$INFO{$inf});
-																$ac_out{$inf}=",$inf_ac[$i]";
+																$ac_out{$inf}=$inf_ac[$i];
 														}
 												}
 										}elsif(length($line[3]) == length($alt[$i])){#ref=AGG,alt=TGGなどの時
@@ -89,10 +89,10 @@ while(<VCF>){
 														foreach my $inf(@info_ac){
 																if(defined $ac_out{$inf}){
 																		my @inf_ac=split(/,/,$INFO{$inf});
-																		$ac_out{$inf}=$inf_ac[$i];
+																		$ac_out{$inf}.=",$inf_ac[$i]";
 																}else{
 																		my @inf_ac=split(/,/,$INFO{$inf});
-																		$ac_out{$inf}=",$inf_ac[$i]";
+																		$ac_out{$inf}=$inf_ac[$i];
 																}
 														}
 										}else{#indelの時

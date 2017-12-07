@@ -66,15 +66,14 @@ foreach my $chr (@chr){
 														print OUTT "$chr\t$pos\t$refseq\t$alt[$i]\t".join("\t",@info_tsv)."\n";
 												}
 										}
-										my @info_tsv=();
+										my %info_tsv=();
 										foreach my $race(("","_Adj","_AFR", "_AMR", "_EAS", "_FIN", "_NFE", "_OTH", "_SAS")){
 												my $ac=sum(split(/,/,$INFO{"AC$race"}));
 												my $an=$INFO{"AN$race"};
-												push(@info_tsv,$an-$ac);
-												if($race ne ""){
-														push(@info_tsv,("NA","NA"));
-												}
+												$info_tsv{"AC$race"}=$an-$ac;
 										}
+										my @info_tsv=();
+										foreach(@info_ac){if(defined $info_tsv{$_}){push(@info_tsv,$info_tsv{$_});}else{push(@info_tsv,"NA");}}
 										map{push(@info_tsv,$INFO{$_})}@info_an;
 										my $t=0;
 										my @info_out=();
@@ -86,15 +85,21 @@ foreach my $chr (@chr){
 										print OUTT "$chr\t$pos\t$refseq\t$line[3]\t".join("\t",@info_tsv)."\n";
 								}else{
 										if($line[4] ne $refseq){print "liftover correct?at $_\nliftover:".$remap{"$line[0]:$line[1]"}."\n";}
-										my @info_tsv=();
+										my%info_tsv=();
 										foreach my $race(("","_Adj","_AFR", "_AMR", "_EAS", "_FIN", "_NFE", "_OTH", "_SAS")){
-												my $ac=sum(split(/,/,$INFO{"AC$race"}));
+												my $ac=$INFO{"AC$race"};
 												my $an=$INFO{"AN$race"};
-												push(@info_tsv,$an-$ac);
-												if($race ne ""){
-														push(@info_tsv,("NA","NA"));
+												$info_tsv{"AC$race"}=$an-$ac;
+												if(($race ne "")&&($race ne "_Adj")){
+														$info_tsv{"Het$race"}=$INFO{"Het$race"};
+														$info_tsv{"Hom$race"}=($an-$INFO{"Het$race"}-$INFO{"Hom$race"}*2)/2;
+												}elsif($race eq ""){
+														$info_tsv{"AC_Het"}=$INFO{"AC_Het"};
+														$info_tsv{"AC_Hom"}=($an-$INFO{"AC_Het"}-$INFO{"AC_Hom"}*2)/2;
 												}
 										}
+										my @info_tsv=();
+										foreach(@info_ac){if(defined $info_tsv{$_}){push(@info_tsv,$info_tsv{$_});}else{push(@info_tsv,"NA");}}
 										map{push(@info_tsv,$INFO{$_})}@info_an;
 										my $t=0;
 										my @info_out=();
@@ -146,6 +151,7 @@ foreach my $chr (@chr){
 										($ref,$alt) = map{$_ =substr($_,1);($_?$_:"-")}($ref,$alt);
 										--$ref_length;--$alt_length;++$pos;
 								}
+								if($ref eq "-"){--$pos;}
 								my $info_out=join("\t",map{"$INFO{$_}"}(@info_ac,@info_an));
 								print OUTT "$chr\t$pos\t$ref\t$alt\t$info_out\n";
 						}else{
