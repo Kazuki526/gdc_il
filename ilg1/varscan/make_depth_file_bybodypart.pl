@@ -71,7 +71,7 @@ sub main ( $ ){
 						$file_num++;
 						my $outfile="/Volumes/areca42TB/tcga/maf_norm/$pj/depth/tout$file_num.tsv";
 						open(OUT,">$outfile");
-						print OUT "chr\tposition\t".join(@pa_ids)."\n";
+						print OUT "chr\tposition\t".join("\t",@pa_ids)."\n";
 						close OUT;
 						`samtools depth -q 10 -b $bed_file @bam_files >>$outfile`;
 						@bam_files=();
@@ -79,9 +79,9 @@ sub main ( $ ){
 				}
 		}
 		$file_num++;
-		my $outfile=$path."varscan/$pj/depth/out$file_num.tsv";
+		my $outfile="/Volumes/areca42TB/tcga/maf_norm/$pj/depth/tout$file_num.tsv";
 		open(OUT,">$outfile");
-		print OUT "chr\tposition\t".join(@pa_ids)."\n";
+		print OUT "chr\tposition\t".join("\t",@pa_ids)."\n";
 		close OUT;
 		`samtools depth -q 10 -b $bed_file @bam_files >>$outfile`;
 }

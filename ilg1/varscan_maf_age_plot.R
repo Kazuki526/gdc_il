@@ -145,7 +145,7 @@ varscan_error = norm_maf %>>%
   ungroup()
 
 norm_maf = norm_maf %>>%
-  filter(!(LOH == "back_mutation" & n_ref_count !=0 )) %>>%
+#  filter(!(LOH == "back_mutation" & n_ref_count !=0 )) %>>% ←これは使うたびにする！！
   left_join(varscan_error %>>% filter(an_error >=100) %>>%rename(n_allele2=alt)) %>>%
   filter(is.na(an_error)) %>>% dplyr::select(-an_error)
 ###################################################################################################
@@ -223,13 +223,15 @@ somatic_maf = data.frame(cancer_type = c("BRCA","COAD","GBM","HNSC","KICH","KIRC
   mutate(file=paste0("kaz_maf/extracted_maf/",tolower(cancer_type),"_topdriver105genes.maf"))　%>>%
   mutate(data = purrr::map(file,~read_maf(.))) %>>%
   unnest() %>>%dplyr::select(-file) %>>%
-  mutate(cancer_type = ifelse((cancer_type=="COAD" | cancer_type=="READ"),"CRC",cancer_type)) %>>%
+  mutate(cancer_type = ifelse((cancer_type=="COAD" | cancer_type=="READ"),"CRC",as.character(cancer_type))) %>>%
+#mafはおなじpatientから複数回sequenceしている場合複数回lineがあるため取り除く
+  group_by(gene_symbol,chr,start,ref,allele1,allele2,patient_id) %>>%
+  filter(t_depth == max(t_depth)) %>>%ungroup() %>>%
   (?.%>>%dplyr::count(gene_symbol,Transcript_ID)%>>%group_by(gene_symbol)%>>%filter(n() >1))
 ## ENST00000507379とENST00000300305,ENST00000610664は除く
 somatic_maf = somatic_maf %>>%
   filter(Transcript_ID !="ENST00000507379",Transcript_ID != "ENST00000300305", Transcript_ID != "ENST00000610664")
 # これで１つのgene に1つのtranscript_IDとなる。
-
 
 ### somatic mutation頻度の高い遺伝子(cancer typeごとに)
 somatic_ranking = somatic_maf %>>%
@@ -291,7 +293,8 @@ tally_norm_maf = norm_maf %>>%
   mutate(homo=ifelse(n_genotype=="homo",ifelse(chr=="X" & gender=="male",0,1),0))%>>%
   group_by(chr,start,end,ref,alt) %>>%
   summarise(ac_cancer=n(),homo_cancer=sum(homo)/2,gene_symbol=first(gene_symbol),
-            Consequence=first(Consequence),PolyPhen=first(PolyPhen),mutype=first(mutype)) %>>%
+            Consequence=first(Consequence),PolyPhen=first(PolyPhen),mutype=first(mutype),
+            cDNA_position=first(cDNA_position),CDS_position=first(CDS_position)) %>>%
   ungroup()
 
 #### classify each variant AF = ~0.5%(3),0.5%~5%(2),5%~(3) in AF_class colum
@@ -313,8 +316,6 @@ if(0){
 #######################################################################################################
 ################################filtering duplicate? position #########################################
 #######################################################################################################
-###目で見た結果　明らかにおかしくて除くべきsiteはなかった。
-if(0){
 ### HWE test ###
 HWE_test=function(AF,homo,hetero,an){
   .hw=c(AF^2,2*AF*(1-AF),1-(AF^2)-(2*AF*(1-AF)))
@@ -326,8 +327,7 @@ do_HWE = function(.data){
            .data$homo_cancer,.data$hetero_cancer,.data$an_cancer)
 }
 
-
-##### chrX以外 #####
+### altであるのがheteroのみでduplicateしているっぽい箇所(hetero >= 400 && alt_homo <=10のsite) ###
 error_site = tally_norm_maf%>>%
   filter(chr != "chrX") %>>%
   left_join(varscan_error) %>>% mutate(an_error = ifelse(is.na(an_error),0,an_error)) %>>%
@@ -342,7 +342,46 @@ error_site = tally_norm_maf%>>%
   mutate(ref_homo_cancer = (an_cancer/2 - homo_cancer - hetero_cancer)) %>>%
   dplyr::select(gene_symbol,chr,start,end,ref,alt,HWE,ac_cancer,an_cancer,ref_homo_cancer,hetero_cancer,homo_cancer) %>>%
   filter(HWE < 0.01) %>>%
+  filter(hetero_cancer >=400,homo_cancer <= 10)
+write_df(error_site,"/Volumes/areca42TB2/gdc/varscan/all_patient/duplicated_error_site.tsv")
+## ちょっとクライテリアをかえてみたら、、って見せるように
+tally_norm_maf%>>%
+  filter(chr != "chrX") %>>%
+  left_join(varscan_error) %>>% mutate(an_error = ifelse(is.na(an_error),0,an_error)) %>>%
+  mutate(start = ifelse(alt == "-",start -1,start)) %>>%
+  left_join(coverage_all ) %>>% 
+  mutate(an_cancer =an_cancer - an_error) %>>%
+  dplyr::select(-an_error) %>>%
+  mutate(hetero_cancer = ac_cancer - homo_cancer*2) %>>%
+  nest(-chr,-start,-ref,-alt) %>>%
+  mutate(HWE=purrr::map(data,~do_HWE(.))) %>>%
+  unnest() %>>%
+  mutate(ref_homo_cancer = (an_cancer/2 - homo_cancer - hetero_cancer)) %>>%
+  dplyr::select(gene_symbol,chr,start,end,ref,alt,HWE,ac_cancer,an_cancer,ref_homo_cancer,hetero_cancer,homo_cancer) %>>%
+  filter(HWE < 0.01) %>>%
+  filter(hetero_cancer <400,hetero_cancer >=200,homo_cancer > 10,homo_cancer < 50) %>>%
+  write_df("/Volumes/areca42TB2/gdc/varscan/all_patient/not_duplicated_error_site.tsv")
+
+
+###逆にheteroが少ない方にHWE振り切ってるるsite ###
+##### chrX以外 #####
+error_site_ = tally_norm_maf%>>%
+  filter(chr != "chrX") %>>%
+  left_join(varscan_error) %>>% mutate(an_error = ifelse(is.na(an_error),0,an_error)) %>>%
+  mutate(start = ifelse(alt == "-",start -1,start)) %>>%
+  left_join(coverage_all ) %>>% 
+  mutate(an_cancer =an_cancer - an_error) %>>%
+  dplyr::select(-an_error) %>>%
+  mutate(hetero_cancer = ac_cancer - homo_cancer*2) %>>%
+  nest(-chr,-start,-ref,-alt) %>>%
+  mutate(HWE=purrr::map(data,~do_HWE(.))) %>>%
+  unnest() %>>%
+  mutate(ref_homo_cancer = (an_cancer/2 - homo_cancer - hetero_cancer)) %>>%
+  dplyr::select(gene_symbol,chr,start,end,ref,alt,HWE,ac_cancer,an_cancer,ref_homo_cancer,hetero_cancer,homo_cancer) %>>%
+  filter(HWE < 0.01) %>>%
   filter(homo_cancer > 50)
+#なさそう、、、
+
 
 ##### chr X ######
 x_error_site = norm_maf %>>%
@@ -366,17 +405,48 @@ x_error_site = norm_maf %>>%
   mutate(ref_homo_cancer = (an_cancer/2 - homo_cancer - hetero_cancer)) %>>%
   dplyr::select(gene_symbol,chr,start,end,ref,alt,HWE,ac_cancer,an_cancer,ref_homo_cancer,hetero_cancer,homo_cancer) %>>%
   filter(HWE < 0.01) 
+#こっちもなさそう、、、
 
-tally_norm_maf %>>%
-  left_join(coverage_tbl %>>% mutate(chr = paste0("chr",chr))) %>>%View
-  filter(an_cancer >9000)%>>%
-  ggplot()+
-  geom_histogram(aes(x=an_cancer),binwidth = 100 )
+#error_siteの前後100bpを除く!!(KMT2Cは多すぎるので遺伝子ごと解析から外す)
+#もちろんsomatic mutationも!!
+error_region = error_site %>>%
+  mutate(error_start = start -101, error_end = end +100) %>>%
+  group_by(gene_symbol) %>>%
+  summarise(chr=first(chr),error_start=min(error_start),error_end=max(error_end)) %>>% ungroup() %>>%
+  dplyr::select(gene_symbol,chr,error_start,error_end)
 
-error_site %>>%
-  filter( HWE <1E-100) %>>%View
-}
-#特になさそう、、、
+norm_maf = norm_maf %>>%
+  filter(gene_symbol != "KMT2C") %>>%
+  left_join(error_region) %>>%
+  filter(!(start >= error_start & end <= error_end)|is.na(error_start)) %>>%
+  dplyr::select(-error_start,-error_end)
+
+tally_norm_maf = tally_norm_maf %>>%
+  filter(gene_symbol != "KMT2C") %>>%
+  left_join(error_region) %>>%
+  filter(!(start >= error_start & end <= error_end)|is.na(error_start)) %>>%
+  dplyr::select(-error_start,-error_end)
+
+classed_site = classed_site %>>%
+  filter(gene_symbol != "KMT2C") %>>%
+  left_join(error_region) %>>%
+  filter(!(start >= error_start & end <= error_end)|is.na(error_start)) %>>%
+  dplyr::select(-error_start,-error_end)
+
+somatic_maf = somatic_maf %>>%
+  filter(gene_symbol != "KMT2C") %>>%
+  left_join(error_region) %>>%
+  filter(!(start >= error_start & end <= error_end)|is.na(error_start)) %>>%
+  dplyr::select(-error_start,-error_end)
+#somatic_rankingも作り直そう！！(235行のところの繰り返し)
+somatic_ranking = somatic_maf %>>%
+  tidyr::separate(CDS_position,into = c("cds_position","cds_length")) %>>%
+  group_by(cancer_type,gene_symbol,mutype) %>>%
+  summarise(n=n(),cds_length=as.double(first(cds_length))) %>>%
+  left_join(driver_genes %>>%select(gene,role),by = c("gene_symbol"="gene")) %>>%
+  group_by(cancer_type,mutype,role) %>>%
+  mutate(somatic_rank = min_rank(desc(n/cds_length)))%>>%
+  dplyr::select(-n)
 
 #####################################################################################################################
 #### patient number ####
@@ -399,11 +469,21 @@ patient_list = norm_maf %>>%
 #### class 1,2のsiteのcoverage(patientごと) #########
 mid_af_coverage =read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/AF_mid_coverage_by_patient.tsv") %>>%
   left_join(varscan_error %>>%filter(an_error > 100) %>>%dplyr::select(chr,start,an_error)) %>>%
-  filter(!is.na(an_error)) %>>%
-  dplyr::select(-an_error)
+  filter(is.na(an_error)) %>>%
+  dplyr::select(-an_error) %>>%
+  left_join(error_region) %>>%
+  filter(!(start >= error_start & start <= error_end)|is.na(error_start)) %>>%
+  dplyr::select(-error_start,-error_end,-gene_symbol) %>>%
+  left_join(patient_list) %>>%
+  filter(!is.na(cancer_type))
 
 
-
+#####################################################################################################################
+#####################################################################################################################
+#####################################################################################################################
+#ここから解析
+#ここから解析
+#ここから解析
 ##########################################
 ########## AF >0.5% site(class 1 or 2) ##########
 ##########################################
@@ -435,15 +515,17 @@ class1_plot = function(.data,.cancer_type){
 #####################################################
 ## all patient ###(AF_class == 1か2にしてclassを変える)
 .plot = classed_site %>>%
-  filter(mutype!="silent",AF_class == 2,role == "TSG") %>>%
-  mutate(patient_focal="focal") %>>%
-  left_join(patient_list %>>%mutate(patient_focal="focal")) %>>%
-  dplyr::select(-ac_cancer,-homo_cancer,-ac_exac,an_exac,-AF_class,-patient_focal) %>>%
+  filter(mutype!="silent",AF_class == 1,role == "TSG") %>>%
+  left_join(mid_af_coverage) %>>%
+  filter(focal == "ok",!is.na(age)) %>>%
+  dplyr::select(-ac_cancer,-homo_cancer,-ac_exac,-an_exac,-AF_class,-focal) %>>%
   left_join(norm_maf %>>%filter(!(soma_or_germ=="somatic" & LOH =="no"))) %>>%
+  filter(!(LOH == "back_mutation" & n_ref_count !=0 )|is.na(LOH)) %>>%
+#  filter(!(chr=="chrX" & gender=="male"))%>>%
   mutate(genotype = ifelse(is.na(n_genotype),"refref",ifelse(n_genotype=="hetero","refalt","altalt")),
          PolyPhen=ifelse(is.na(PolyPhen),"none",str_extract(PolyPhen,"\\w+")),
          age=round(age/365.25*100)/100) %>>%
-  mutate(site=paste(gene_symbol,paste(ref,alt,sep=">"),mutype,PolyPhen,sep = ":"),
+  mutate(site=paste(gene_symbol,chr,cDNA_position,paste(ref,alt,sep=">"),mutype,sep = ":"),
          genotype_order = ifelse(genotype=="refref",1,ifelse(genotype=="refalt",2,3))) %>>%
   class1_plot("all")
 ggsave("age_plot/class2_all.pdf",.plot,width = 10,height = 15)
@@ -454,25 +536,65 @@ class1_bycancertype_plot = function(.data){
   class1_plot(.data,.CT)
 }
 .plot_byCT = classed_site %>>%
-  filter(mutype!="silent",AF_class == 2,role == "TSG") %>>%
-  mutate(patient_focal="focal") %>>%
-  left_join(patient_list %>>%mutate(patient_focal="focal")) %>>%
-  dplyr::select(-ac_cancer,-homo_cancer,-ac_exac,an_exac,-AF_class,-patient_focal) %>>%
+  filter(mutype!="silent",AF_class == 1,role == "TSG") %>>%
+  left_join(mid_af_coverage) %>>%
+  filter(focal == "ok",!is.na(age)) %>>%
+  dplyr::select(-ac_cancer,-homo_cancer,-ac_exac,-an_exac,-AF_class,-focal) %>>%
   left_join(norm_maf%>>%filter(!(soma_or_germ=="somatic" & LOH =="no"))) %>>%
+  filter(!(LOH == "back_mutation" & n_ref_count !=0 )|is.na(LOH)) %>>%
+#  filter(!(chr=="chrX" & gender=="male"))%>>%
   mutate(genotype = ifelse(is.na(n_genotype),"refref",ifelse(n_genotype=="hetero","refalt","altalt")),
          PolyPhen=ifelse(is.na(PolyPhen),"none",str_extract(PolyPhen,"\\w+")),
          age=round(age/365.25*100)/100) %>>%
-  mutate(site=paste(gene_symbol,paste(ref,alt,sep=">"),mutype,PolyPhen,sep = ":"),
+  mutate(site=paste(gene_symbol,chr,cDNA_position,paste(ref,alt,sep=">"),mutype,sep = ":"),
          genotype_order = ifelse(genotype=="refref",1,ifelse(genotype=="refalt",2,3)),
          CT=cancer_type ) %>>%
   nest(-cancer_type) %>>%
   mutate(plot=purrr::map(data,~class1_bycancertype_plot(.)))
-ggsave("age_plot/class2_by_cancer_type.pdf",
+ggsave("age_plot/class1_by_cancer_type.pdf",
        gridExtra::marrangeGrob(.plot_byCT$plot,nrow = 1,ncol = 1,top = NULL),
        height = 15, width = 10)
 rm(.plot_byCT)
 
-
+#########################################################
+##### 上の作図をほしいsite絞り込んでcancer_typeごとに ###
+plot_site_byCT = function(.data){
+  .site=first(.data$site)
+  .mean_age = .data %>>%
+    group_by(cancer_type,genotype) %>>%
+    summarise(mean = round(mean(age)*100)/100) 
+  .patient_num = .data %>>%
+    dplyr::count(cancer_type,genotype)
+  .data %>>%
+    ggplot(aes(x=reorder(genotype,genotype_order),y=age))+
+    geom_violin()+
+    geom_boxplot(width=.2,fill="black")+ 
+    stat_summary(fun.y=mean,geom = "point", fill="white",shape=21,size=1)+
+    facet_wrap(~ cancer_type,ncol=5)+
+    ylim(0,120)+
+    geom_signif(comparisons = list(c("refref","refalt")),
+                test = "wilcox.test",map_signif_level = T, col="red",y_position = 95)+
+    geom_signif(comparisons = list(c("refalt","altalt")),
+                test = "wilcox.test",map_signif_level = T, col="red",y_position = 100)+
+    theme(strip.text = element_text(size=6),axis.text.x = element_text(angle = -45, hjust = 0))+
+    ggtitle(.site)+
+    geom_text(data =.patient_num,aes(x=genotype,y=5,label=n),size=3,position="stack")+
+    geom_text(data = .mean_age,aes(x=genotype,y=120,label=mean),size=2,position = "stack",color="red")
+}
+.plot = classed_site %>>%
+  filter(cDNA_position=="1982/8604",alt=="C") %>>%  ##ここをsiteごとに変える
+  left_join(mid_af_coverage) %>>%
+  filter(focal == "ok",!is.na(age)) %>>%
+  dplyr::select(-ac_cancer,-homo_cancer,-ac_exac,an_exac,-AF_class,-focal) %>>%
+  left_join(norm_maf %>>%filter(!(soma_or_germ=="somatic" & LOH =="no"))) %>>%
+  filter(!(LOH == "back_mutation" & n_ref_count !=0 )|is.na(LOH)) %>>%
+  mutate(genotype = ifelse(is.na(n_genotype),"refref",ifelse(n_genotype=="hetero","refalt","altalt")),
+         PolyPhen=ifelse(is.na(PolyPhen),"none",str_extract(PolyPhen,"\\w+")),
+         age=round(age/365.25*100)/100) %>>%
+  mutate(site=paste(gene_symbol,chr,cDNA_position,paste(ref,alt,sep=">"),mutype,sep = ":"),
+         genotype_order = ifelse(genotype=="refref",1,ifelse(genotype=="refalt",2,3))) %>>%
+  plot_site_byCT()
+ggsave("age_plot/by_site/class2/TSC1_1982.pdf",.plot,width = 15,height = 15)
 
 ##########################################
 ######### AF <5% site(class 2,3) #########
@@ -488,7 +610,9 @@ class23_plot = function(.site_tbl, .title){
                                                             "benign"=6,
                                                             "none"=7))
   }
+  #loh_surviveにしたければ下のnorm_mafを書き換え
   nofilter = norm_maf %>>%
+    filter(!(LOH == "back_mutation" & n_ref_count !=0 )) %>>%
     left_join(.site_tbl %>>%dplyr::rename(n_allele2 = alt)) %>>%
     filter(!is.na(AF_class),!(soma_or_germ=="somatic" & LOH=="no")) %>>%
     mutate(PolyPhen=str_extract(PolyPhen,"^\\w+")) %>>%
@@ -535,7 +659,7 @@ class23_plot = function(.site_tbl, .title){
     left_join(driver_genes %>>%filter(role=="TSG") %>>%dplyr::rename(gene_symbol=gene)%>>%
                 mutate(patient_focal="focal") %>>%dplyr::select(gene_symbol,patient_focal))%>>%
     dplyr::select(-patient_focal) %>>%
-    left_join(somatic_ranking %>>%filter(mutype=="missense")) %>>%filter(somatic_rank <=10) %>>%
+    #left_join(somatic_ranking %>>%filter(mutype=="missense")) %>>%filter(somatic_rank <=30) %>>%
     #left_join(cna_del_rank) %>>%filter(loh_rank <= 30) %>>%
     left_join(nofilter) %>>%
     mutate(mutation_type = ifelse(is.na(mutation_type),"none",mutation_type),
@@ -552,7 +676,7 @@ class23_plot = function(.site_tbl, .title){
 classed_site %>>% 
   filter(AF_class==3)%>>%
   filter(mutype=="truncating"|mutype=="missense") %>>%
-  class23_plot("class3_filter/somatic10")
+  #class23_plot("class3_filter/loh30")
   class23_plot("class3_missense_or_truncate")
 
   
@@ -561,7 +685,44 @@ classed_site %>>%
   filter(AF_class==2|AF_class==3)%>>%
   filter(mutype=="truncating"|mutype=="missense") %>>%
   class23_plot("class23_missense_or_truncate_loh20")
-  
+
+
+######################################################################
+#################遺伝子やhotspotで絞ってみてみよう####################
+##hotspot
+hotspot_region = somatic_maf %>>%
+  filter(mutype!="truncating") %>>%
+  left_join(patient_list)%>>%filter(!is.na(age))%>>%
+  left_join(patient_list %>>%group_by(cancer_type)%>>%summarise(CT_patient_num=n()))%>>%
+  dplyr::count(cancer_type,gene_symbol,chr,start,CT_patient_num) %>>%
+  filter(n > CT_patient_num*0.01) %>>%
+  mutate(hotspot_start =start-31,hotspot_end = start +30) %>>%
+  dplyr::select(-start)
+
+classed_site %>>% 
+  filter(AF_class==2|AF_class==3)%>>%
+  filter(mutype=="truncating"|mutype=="missense") %>>%
+  left_join(hotspot_region) %>>%
+  filter(hotspot_start <start,hotspot_end >end) %>>%
+  group_by(gene_symbol,chr,start,end,ref,alt) %>>%
+  summarise_all(first) %>>%
+  class23_plot("class23_hotspot")
+
+#mutationなさすぎ、、
+
+### LOH_survive
+loh_survive = norm_maf %>>%
+  filter(!(LOH == "back_mutation" & n_ref_count !=0 )) %>>%
+  left_join(annotate_ascat %>>%group_by(patient_id,gene_symbol) %>>%
+              summarise(nmajor=min(nmajor),nminor=min(nminor))) %>>%
+  filter(nmajor>0,nminor==0) %>>%
+  filter(t_ref_count < t_alt_count)
+#上のclass23_plotのnorm_mafをlof_surviveに書き換えて下を実行
+classed_site %>>% 
+  filter(AF_class==3)%>>%
+  filter(mutype=="truncating"|mutype=="missense") %>>%
+  class23_plot("class3_filter/loh_survive")
+
   
 ##################################################################################################
 ####################################### siteごとに発症年齢分布 ###################################
@@ -572,10 +733,11 @@ classed_site %>>%
 .plot = classed_site %>>%
   filter(mutype!="silent",AF_class == 2,role == "TSG") %>>%
 # filter(mutype!="silent",(AF_class == 1 | AF_calss == 2),role == "TSG") %>>%
-  mutate(patient_focal="focal") %>>%
-  left_join(patient_list %>>%mutate(patient_focal="focal")) %>>%
-  dplyr::select(-ac_cancer,-homo_cancer,-AF_class,-patient_focal) %>>%
-  left_join(norm_maf %>>%filter(!(soma_or_germ=="somatic" & LOH =="no"))) %>>%
+  left_join(mid_af_coverage) %>>%
+  filter(focal == "ok",!is.na(age)) %>>%
+  dplyr::select(-ac_cancer,-homo_cancer,-AF_class,-focal) %>>%
+  left_join(norm_maf%>>%filter(!(soma_or_germ=="somatic" & LOH =="no"))) %>>%
+  filter(!(LOH == "back_mutation" & n_ref_count !=0 )|is.na(LOH)) %>>%
   mutate(genotype = ifelse(is.na(n_genotype),"refref",ifelse(n_genotype=="hetero","refalt","altalt")),
          PolyPhen=ifelse(is.na(PolyPhen),"none",str_extract(PolyPhen,"\\w+")),
          age=round(age/365.25*100)/100) %>>%
@@ -588,15 +750,20 @@ classed_site %>>%
   geom_point(aes(x=ac_exac/an_exac, y=diagnosised_age_compared_to_refref,
                  shape=hetero_or_homo,colour=hetero_or_homo))
 .plot
-ggsave("age_plot/class2_signtest.pdf",.plot,width = 10,height = 10)
+ggsave("age_plot/class2_signtest.pdf",.plot,width = 15,height = 15)
 
 #by cancer type
 .plot = classed_site %>>%
   filter(mutype!="silent",AF_class == 2,role == "TSG") %>>%
-  mutate(patient_focal="focal") %>>%
-  left_join(patient_list %>>%mutate(patient_focal="focal")) %>>%
-  dplyr::select(-ac_cancer,-homo_cancer,-AF_class,-patient_focal) %>>%
-  left_join(norm_maf %>>%filter(!(soma_or_germ=="somatic" & LOH =="no"))) %>>%
+# filter(mutype!="silent",(AF_class == 1 | AF_calss == 2),role == "TSG") %>>%
+  left_join(mid_af_coverage) %>>%
+  filter(focal == "ok",!is.na(age)) %>>%
+  left_join(coverage_all) %>>%
+  mutate(ac_exac = ifelse(is.na(ac_exac),ac_cancer,ac_exac),
+         an_exac = ifelse(is.na(an_exac),an_cancer,an_exac)) %>>%
+  dplyr::select(-ac_cancer,-homo_cancer,-an_cancer,-AF_class,-focal) %>>%
+  left_join(norm_maf%>>%filter(!(soma_or_germ=="somatic" & LOH =="no"))) %>>%
+  filter(!(LOH == "back_mutation" & n_ref_count !=0 )|is.na(LOH)) %>>%
   mutate(genotype = ifelse(is.na(n_genotype),"refref",ifelse(n_genotype=="hetero","refalt","altalt")),
          PolyPhen=ifelse(is.na(PolyPhen),"none",str_extract(PolyPhen,"\\w+")),
          age=round(age/365.25*100)/100) %>>%
@@ -611,6 +778,40 @@ ggsave("age_plot/class2_signtest.pdf",.plot,width = 10,height = 10)
   facet_wrap(~ cancer_type,ncol=5)
 .plot
 ggsave("age_plot/class2_signtest_byCT.pdf",.plot,height = 15,width = 15)
+
+############# sign test ################
+sign_test = function(.data){
+  .test = binom.test(c(.data$up,.data$down))
+  .test$p.value
+}
+classed_site %>>%
+  filter(mutype!="silent",AF_class == 3,role == "TSG") %>>%
+  # filter(mutype!="silent",(AF_class == 1 | AF_calss == 2),role == "TSG") %>>%
+  left_join(mid_af_coverage) %>>%
+  filter(focal == "ok",!is.na(age)) %>>%
+  left_join(coverage_all) %>>%
+  mutate(ac_exac = ifelse(is.na(ac_exac),ac_cancer,ac_exac),
+         an_exac = ifelse(is.na(an_exac),an_cancer,an_exac)) %>>%
+  #filter(ac_exac/an_exac <= 0.02) %>>% 
+  dplyr::select(-ac_cancer,-homo_cancer,-an_cancer,-AF_class,-focal) %>>%
+  left_join(norm_maf%>>%filter(!(soma_or_germ=="somatic" & LOH =="no"))) %>>%
+  filter(!(LOH == "back_mutation" & n_ref_count !=0 )|is.na(LOH)) %>>%
+  mutate(genotype = ifelse(is.na(n_genotype),"refref",ifelse(n_genotype=="hetero","refalt","altalt")),
+         PolyPhen=ifelse(is.na(PolyPhen),"none",str_extract(PolyPhen,"\\w+")),
+         age=round(age/365.25*100)/100) %>>%
+  group_by(chr,start,ref,alt,genotype,ac_exac,an_exac,cancer_type) %>>%
+  summarise(age = mean(age)) %>>%ungroup()%>>%
+  spread(genotype,age) %>>%
+  gather(hetero_or_homo,age,refalt,altalt) %>>%
+  mutate(diagnosised_age_compared_to_refref = age/refref) %>>%
+  filter(!is.na(diagnosised_age_compared_to_refref)) %>>%
+  mutate(age_up_or_down = ifelse(diagnosised_age_compared_to_refref >=1, "up", "down")) %>>%
+  count(cancer_type,hetero_or_homo,age_up_or_down) %>>%
+  tidyr::spread(age_up_or_down,n) %>>%
+  tidyr::nest(down,up) %>>%
+  mutate(p_value = purrr::map(data,~sign_test(.))) %>>%
+  tidyr::unnest() %>>%View
+
 
 ### class 3 ###
 # all cancer type together
@@ -630,7 +831,7 @@ ggsave("age_plot/class2_signtest_byCT.pdf",.plot,height = 15,width = 15)
 ggsave("age_plot/class3_signtest.pdf",.plot,width = 10,height = 10)
 
 #by cancer type
-mean_age = patient_list %>>%group_by(cancer_type) %>>%summarise(age=round(mean(age)/365.25*100)/100)
+mean_age = patient_list %>>%group_by(cancer_type) %>>%summarise(mean_age=round(mean(age)/365.25*100)/100)
 .plot = classed_site %>>%
   filter(mutype!="silent",AF_class == 3,role == "TSG") %>>%
   dplyr::select(-ac_cancer,-homo_cancer,-AF_class,-ac_exac,-an_exac) %>>%
@@ -641,14 +842,34 @@ mean_age = patient_list %>>%group_by(cancer_type) %>>%summarise(age=round(mean(a
   left_join(norm_maf %>>%filter(!(soma_or_germ=="somatic" & LOH =="no")) %>>% dplyr::rename(alt=n_allele2)) %>>%
   group_by(chr,start,ref,alt,patient_num,cancer_type) %>>%
   summarise(age = round(mean(age)/365.25*100)/100) %>>%
+  filter(!is.na(age),cancer_type !="KICH") %>>%
   ggplot(aes(x=patient_num, y=age))+
   geom_point()+
-  geom_smooth(method = "lm")+
+  #geom_smooth(method = "lm")+
   facet_wrap(~ cancer_type,ncol =5)+
-  geom_hline(data = mean_age, aes(yintercept = age))
+  geom_hline(data = mean_age, aes(yintercept = mean_age))
 .plot
-ggsave("age_plot/class3_signtest_byCT.pdf",.plot,height = 15,width = 15)
+ggsave("age_plot/class3_signtest_byCT_nosmooth.pdf",.plot,height = 15,width = 15)
 
+####sign test
+.plot = classed_site %>>%
+  filter(mutype!="silent",AF_class == 3,role == "TSG") %>>%
+  dplyr::select(-ac_cancer,-homo_cancer,-AF_class,-ac_exac,-an_exac) %>>%
+  left_join(norm_maf %>>%filter(!(soma_or_germ=="somatic" & LOH =="no")) %>>% dplyr::rename(alt=n_allele2)) %>>%
+  mutate(genotype = ifelse(is.na(n_genotype),"refref",ifelse(n_genotype=="hetero","refalt","altalt"))) %>>%
+  group_by(chr,start,ref,alt) %>>%
+  summarise(patient_num=n()) %>>%
+  left_join(norm_maf %>>%filter(!(soma_or_germ=="somatic" & LOH =="no")) %>>% dplyr::rename(alt=n_allele2)) %>>%
+  group_by(chr,start,ref,alt,patient_num,cancer_type) %>>%
+  summarise(age = round(mean(age)/365.25*100)/100) %>>%ungroup()%>>%
+  left_join(mean_age) %>>%
+  filter(!is.na(age),cancer_type !="KICH") %>>%
+  mutate(age_up_or_down=ifelse(mean_age > age,"down","up")) %>>%
+  count(cancer_type,age_up_or_down) %>>%
+  tidyr::spread(age_up_or_down,n) %>>%
+  tidyr::nest(down,up) %>>%
+  mutate(p_value = purrr::map(data,~sign_test(.))) %>>%
+  tidyr::unnest() %>>%View
 
 ####################################################################################################################
 ######### cumulative mutation effect ##########
@@ -689,7 +910,16 @@ missense_count = classed_site %>>%
   summarise(missense_num=n()) %>>%
   mutate(missense_count=as.character(ifelse(missense_num >= 10,"10-",missense_num)),
          missense_count_order=ifelse(missense_num >=10,10,missense_num))
-
+#相関直線を
+regression = patient_list %>>%
+  left_join(missense_count) %>>%
+  mutate(missense_num=ifelse(is.na(missense_num),0,missense_num),
+         age = round(age/365.25*100)/100) %>>%
+  tidyr::nest(-cancer_type) %>>%
+  mutate(data = purrr::map(data,~as.data.frame(as.list(coef(lm(age ~ missense_num,data = .)))))) %>>%
+  unnest()
+write_df(regression,"age_plot/cumulative/class3_allgene_regression.tsv")
+##バイオリンプロットで見やすく
 .plot = patient_list %>>%
   left_join(missense_count) %>>%
   mutate(missense_count = ifelse(is.na(missense_count),"0",missense_count),
@@ -703,13 +933,35 @@ missense_count = classed_site %>>%
   geom_boxplot(width=.3,fill="black")+ 
   stat_summary(fun.y=mean,geom = "point", fill="white",shape=21,size=2)+
   facet_wrap( ~ cancer_type, ncol = 5)+
+  #geom_abline(data = regression %>>%filter(missense_num > 0),
+  #            aes(intercept = X.Intercept.,slope = missense_num),colour = "blue")+
+  #geom_abline(data = regression %>>%filter(missense_num <= 0),
+  #            aes(intercept = X.Intercept.,slope = missense_num),colour = "red")+
   ylim(0,90)+
   geom_text(data =missense_count %>>%count(cancer_type,missense_count),
             aes(x=missense_count,y=5,label=n),size=3,position="stack")+
   theme(strip.text = element_text(size=6),axis.text.x = element_text(angle = -45, hjust = 0))
 .plot
-ggsave("age_plot/cumulative/allgene_missense.pdf",.plot,height = 15,width = 15)
+ggsave("age_plot/cumulative/allgene_missense_nosmooth.pdf",.plot,height = 15,width = 15)
 
+
+
+
+.plot = patient_list %>>%
+  left_join(missense_count) %>>%
+  mutate(missense_count = ifelse(is.na(missense_count),"0",missense_count),
+         missense_count_order = ifelse(is.na(missense_count_order),0,missense_count_order),
+         age=round(age/365.25*100)/100) %>>%
+  left_join(truncating_count) %>>%
+  mutate(truncating=ifelse(is.na(truncating_count),"not_have_truncating","have_truncating")) %>>%
+  filter(truncating=="not_have_truncating") %>>%
+  ggplot(aes(x=missense_count_order, y=age))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  facet_wrap( ~ cancer_type, ncol = 5)+
+  ylim(0,90)+
+  theme(strip.text = element_text(size=6),axis.text.x = element_text(angle = -45, hjust = 0))
+.plot
 
 ###################################################################################################################
 setwd("~/Dropbox/install/tvz/temporary/")
@@ -721,6 +973,7 @@ setwd("~/Dropbox/install/tvz/temporary/")
 #write_df(driver_genes,"driver_genes.tsv")
 #write_df(topdriver_bed,"driver.bed")
 #write_df(mid_af_coverage,"AF_mid_coverage_by_patient.tsv.gz")
+#write_df(error_site,"duplicated_error_site.tsv")
 norm_maf = read_tsv("norm.maf.gz")
 varscan_error = read_tsv("varscan_error")
 somatic_maf = read_tsv("somatic.maf.gz")
@@ -730,3 +983,57 @@ driver_genes = read_tsv("driver_genes.tsv")
 topdriver_bed = read_tsv("driver.bed")
 mid_af_coverage = read_tsv("AF_mid_coverage_by_patient.tsv.gz")
 
+norm_rank = norm_maf %>>%
+  filter(mutype=="missense"|mutype=="truncate") %>>%
+  filter(!(LOH == "back_mutation" & n_ref_count !=0 )|is.na(LOH)) %>>%
+  left_join(classed_site %>>%dplyr::rename(n_allele2=alt)) %>>%
+  filter(AF_class==3) %>>%
+  tidyr::separate(CDS_position,into = c("cds_position","cds_length"),sep = "/") %>>%
+  group_by(gene_symbol,cancer_type,chr,start,ref,n_allele2) %>>%
+  summarise(cds_length=as.double(first(cds_length)),ac=n()) %>>%
+  left_join(patient_list %>>%count(cancer_type))%>>%
+  group_by(gene_symbol,cancer_type) %>>%
+  summarise(n_site=n(),cds_length=first(cds_length),freq=sum(ac)/first(n)) %>>%
+  left_join(driver_genes %>>%select(gene,role),by = c("gene_symbol"="gene")) %>>%
+  group_by(cancer_type,role) %>>%
+  mutate(norm_rank = min_rank(desc(n_site/cds_length)))%>>%
+  dplyr::select(-n_site,-cds_length,-role)
+
+norm_all_rank = classed_site %>>%
+  filter(mutype=="missense"|mutype=="truncate") %>>%
+  tidyr::separate(CDS_position,into = c("cds_position","cds_length"),sep = "/") %>>%
+  filter(AF_class==3) %>>%
+  group_by(gene_symbol) %>>%
+  summarise(n=n(),cds_length=as.double(first(cds_length)),all_freq=sum(ac_cancer)/6352) %>>%
+  left_join(driver_genes %>>%select(gene,role),by = c("gene_symbol"="gene")) %>>%
+  group_by(role) %>>%
+  mutate(norm_all_rank = min_rank(desc(n/cds_length)))%>>%
+  dplyr::select(-n,-cds_length,-role)
+
+norm_have_ornot = classed_site %>>%
+  filter(mutype!="silent",mutype!="inframe_indel",mutype!="splice",AF_class == 3,role == "TSG") %>>%
+  left_join(norm_maf) %>>%
+  group_by(gene_symbol,patient_id) %>>%
+  tally()
+
+up_down = patient_list %>>%mutate(focal="ok") %>>%
+  left_join(driver_genes %>>%dplyr::select(gene,role)%>>%mutate(focal="ok")) %>>%
+  filter(role =="TSG",gene!="KMT2C") %>>%
+  dplyr::rename(gene_symbol=gene) %>>%
+  left_join(norm_have_ornot) %>>%
+  mutate(have_ornot=ifelse(is.na(n),"not","have")) %>>%
+  group_by(cancer_type,gene_symbol,have_ornot) %>>%
+  summarise(age = round(mean(age)/365.25*100)/100,n=n())%>>%
+  group_by(cancer_type,gene_symbol) %>>%
+  mutate(n=min(n)) %>>%
+  tidyr::spread(have_ornot,age) %>>%
+  mutate(up_down=ifelse(have > not,"up","down")) %>>%
+  left_join(cna_del_rank)%>>%
+  dplyr::select(-role,-homodel_rank,-del_rank) %>>%
+  left_join(somatic_ranking %>>%filter(mutype=="missense")) %>>%
+  dplyr::select(-role,-cds_length,-mutype) %>>%
+  left_join(norm_all_rank) %>>%
+  left_join(norm_rank) %>>%
+  mutate(freq_updown=ifelse(freq >=all_freq,"up","down")) %>>%
+  dplyr::arrange(cancer_type,have)
+write_df(up_down,"~/Dropbox/install/tvz/test.tsv")

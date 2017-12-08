@@ -98,9 +98,9 @@ foreach my $file(@ls){
 				my @alt=split(/,/,$line[4]);
 				my $fasta=`samtools faidx $hg38 $line[0]:$posi-$posi`;
 				my ($region,$ref)=split(/\n/,$fasta);
-				if(grep{length($_) >1}($line[3],@alt)){
+				if(grep{length($_) >1}($line[3],@alt)){#indelの場合
 						if($line[3] !~ /^$ref/){print "WARNING:chr$line[0]:$posi ref_colum is not same with hg38 reference\n";}
-				}else{
+				}else{#indelでない場合
 						if($line[3] ne $ref ){
 								my $altn=0;
 								for(my $t=1;@alt >= $t;$t++){

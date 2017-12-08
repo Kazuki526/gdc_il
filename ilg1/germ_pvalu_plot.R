@@ -28,43 +28,55 @@ topdriver_bed=read_tsv("/Volumes/areca42TB/tcga/maf_norm/top_driver105.bed",col_
   tidyr::separate(ids,c("gene_symbol","ensg"),sep=";")
 #brca_maf=read_tsv("/working/maf/7a07a833-4eab-44c9-bbf6-a64bd51c012e/TCGA.BRCA.muse.7a07a833-4eab-44c9-bbf6-a64bd51c012e.protected.maf.gz",comment = "#")
 classify_consequence = function(.data) {
-  dplyr::mutate(.data, mutype= dplyr::recode(Consequence,
-                                             downstream_gene_variant = 'flank',
-                                             `3_prime_UTR_variant` = 'flank',
-                                             upstream_gene_variant = 'flank',
-                                             `5_prime_UTR_variant` = 'flank',
-                                             frameshift_variant = 'truncating',
-                                             frameshift_variant = 'truncating',
-                                             inframe_deletion = 'inframe_indel',
-                                             inframe_insertion = 'inframe_indel',
-                                             intron_variant = 'silent',
-                                             splice_region_variant = 'splice',
-                                             coding_sequence_variant = 'missense',
-                                             missense_variant = 'missense',
-                                             stop_gained = 'truncating',
-                                             stop_lost = 'truncating',
-                                             stop_retained_variant = 'silent',
-                                             synonymous_variant = 'silent',
-                                             splice_acceptor_variant = 'splice',
-                                             splice_donor_variant = 'splice',
-                                             protein_altering_variant = 'inframe_indel',
-                                             start_lost = 'truncating',
-                                             `splice_region_variant,intron_variant` = 'splice',
-                                             `stop_gained,frameshift_variant` = 'truncating',
-                                             `splice_region_variant,synonymous_variant`='splice',
-                                             `splice_region_variant,5_prime_UTR_variant`='splice',
-                                             `missense_variant,splice_region_variant`='missense',
-                                             `intron_variant,non_coding_transcript_variant`='silent',
-                                             `non_coding_transcript_exon_variant,non_coding_transcript_variant`='silent',
-                                             `splice_region_variant,3_prime_UTR_variant`='flank',
-                                             `stop_gained,splice_region_variant`='truncating',
-                                             `stop_gained,protein_altering_variant`='truncating',
-                                             `frameshift_variant,splice_region_variant`='truncating',
-                                             `inframe_deletion,splice_region_variant`='splice',
-                                             `splice_acceptor_variant,intron_variant`='splice',
-                                             `splice_donor_variant,coding_sequence_variant,intron_variant`='splice',
-                                             `stop_gained,inframe_deletion`='truncating',
-                                             `stop_gained,inframe_insertion`='truncating'))
+  mutate(.data,
+         mutype= dplyr::recode(Consequence,
+                               downstream_gene_variant = 'flank',
+                               `3_prime_UTR_variant` = 'flank',
+                               upstream_gene_variant = 'flank',
+                               `5_prime_UTR_variant` = 'flank',
+                               frameshift_variant = 'truncating',
+                               frameshift_variant = 'truncating',
+                               inframe_deletion = 'inframe_indel',
+                               inframe_insertion = 'inframe_indel',
+                               intron_variant = 'silent',
+                               splice_region_variant = 'splice_region',
+                               coding_sequence_variant = 'missense',
+                               missense_variant = 'missense',
+                               stop_gained = 'truncating',
+                               stop_lost = 'truncating',
+                               stop_retained_variant = 'silent',
+                               synonymous_variant = 'silent',
+                               splice_acceptor_variant = 'splice',
+                               splice_donor_variant = 'splice',
+                               protein_altering_variant = 'inframe_indel',
+                               start_lost = 'truncating',
+                               `coding_sequence_variant,3_prime_UTR_variant`='flank',
+                               `coding_sequence_variant,5_prime_UTR_variant`='flank',
+                               `stop_gained,frameshift_variant` = 'truncating',
+                               `missense_variant,splice_region_variant`='missense',
+                               `intron_variant,non_coding_transcript_variant`='silent',
+                               `non_coding_transcript_exon_variant,non_coding_transcript_variant`='silent',
+                               `frameshift_variant,splice_region_variant`='truncating',
+                               `frameshift_variant,start_lost`='truncating',
+                               `frameshift_variant,stop_lost`='truncating',
+                               `inframe_deletion,splice_region_variant`='splice_region',
+                               `inframe_insertion,splice_region_variant`='splice_region',
+                               `protein_altering_variant,splice_region_variant`='inframe_indel',
+                               `splice_acceptor_variant,intron_variant`='splice',
+                               `splice_acceptor_variant,coding_sequence_variant`='splice',
+                               `splice_acceptor_variant,coding_sequence_variant,intron_variant`='splice',
+                               `splice_donor_variant,coding_sequence_variant`='splice',
+                               `splice_donor_variant,coding_sequence_variant,intron_variant`='splice',
+                               `splice_donor_variant,intron_variant`='splice',
+                               `splice_region_variant,5_prime_UTR_variant`='flank',
+                               `splice_region_variant,3_prime_UTR_variant`='flank',
+                               `splice_region_variant,intron_variant` = 'splice_region',
+                               `splice_region_variant,synonymous_variant`='silent',
+                               `start_lost,inframe_deletion`='truncating',
+                               `stop_gained,protein_altering_variant`='truncating',
+                               `stop_gained,inframe_deletion`='truncating',
+                               `stop_gained,inframe_insertion`='truncating',
+                               `stop_gained,splice_region_variant`='truncating'))
 }
 driver_genes=read_tsv("~/git/driver_genes/driver_genes.tsv")%>>%
   filter(refs>3) %>>%
@@ -72,12 +84,13 @@ driver_genes=read_tsv("~/git/driver_genes/driver_genes.tsv")%>>%
   mutate(role=ifelse(is.na(role),"TSG",role))
 
 if(0){  ##################  from here brefore script
-.colnames = c('Hugo_Symbol','Chromosome','Start_Position','End_Position','Reference_Allele','Tumor_Seq_Allele1',
-              'Tumor_Seq_Allele2','t_depth','t_ref_count','t_alt_count','Consequence','PolyPhen')
-.cols = .colnames %>>%
-{setNames(c('c','c','d','d','c','c','c','d','d','d','c','c'), .)} %>>%
-{do.call(readr::cols_only, as.list(.))}
+
 strip_maf = function(infile) {
+  .colnames = c('Hugo_Symbol','Chromosome','Start_Position','End_Position','Reference_Allele','Tumor_Seq_Allele1',
+                'Tumor_Seq_Allele2','t_depth','t_ref_count','t_alt_count','Consequence','PolyPhen')
+  .cols = .colnames %>>%
+  {setNames(c('c','c','d','d','c','c','c','d','d','d','c','c'), .)} %>>%
+  {do.call(readr::cols_only, as.list(.))}
   read_tsv(infile, comment='#', col_types=.cols) %>>%
     classify_consequence() %>>%
     filter(!mutype=='silent') %>>%
@@ -304,7 +317,7 @@ muse_mutect_every_path('ucec')%>>%mutate(cancer_type='UCEC') %>>%
 ###########################################
 if(0){#needed to do only first time
 maf_root='/working/1000genomes/maf'
-.infiles = list.files(maf_root, '.maf$', recursive=TRUE, full.names=TRUE) %>>% (?.)
+.infiles = list.files(maf_root, '.maf$', full.names=TRUE) %>>% (?.)
 
 maf_list = data_frame(path=.infiles, base=basename(path)) %>>%
   tidyr::separate(base, c('sample_allele', 'no'), '\\.', extra='drop') %>>%
@@ -312,17 +325,17 @@ maf_list = data_frame(path=.infiles, base=basename(path)) %>>%
   tidyr::separate(sample_allele,c("sample","allele"),'_',extra = 'drop') %>>%
   (?.)
 
-.colnames = c('Hugo_Symbol','Chromosome','Start_Position','End_Position',
-              'Reference_Allele','Tumor_Seq_Allele2','Consequence','PolyPhen')
+.colnames = c('Hugo_Symbol','Chromosome','Start_Position','End_Position','Reference_Allele','Tumor_Seq_Allele2',
+              'Consequence','PolyPhen',"cDNA_position","CDS_position","Protein_position",'Transcript_ID')
 .cols = .colnames %>>%
-{setNames(c('c','c','d','d','c','c','c','c'), .)} %>>%
+{setNames(c('c','c','d','d','c','c', 'c','c','c','c','c','c'), .)} %>>%
 {do.call(readr::cols_only, as.list(.))}
-
 strip_maf = function(infile) {
   read_tsv(infile, comment='#', col_types=.cols) %>>%
     classify_consequence() %>>%
-    filter(!mutype=='silent') %>>%
-    filter(!mutype=='flank')
+    dplyr::rename(gene_symbol=Hugo_Symbol,chr=Chromosome,start=Start_Position,end=End_Position,
+                  ref=Reference_Allele,alt=Tumor_Seq_Allele2) %>>%
+    left_join(topdriver_bed%>>%dplyr::select(gene_symbol,strand)) %>>%filter(!is.na(strand))
 }
 
 have_y_sample=read_tsv("/working/1000genomes/topdrivers/have_chry_samples.tsv") %>>%
@@ -332,11 +345,7 @@ maf_1kg_nonsilent=maf_list %>>%
   mutate(maf=purrr::map(path,~strip_maf(.))) %>>%
   select(-path) %>>%
   unnest() %>>%
-  dplyr::rename(gene_symbol=Hugo_Symbol,chr=Chromosome,start=Start_Position,
-                end=End_Position,ref=Reference_Allele,alt=Tumor_Seq_Allele2) %>>%
-  left_join(topdriver_bed%>>%dplyr::select(gene_symbol,gene_start,gene_end,strand)) %>>%
   filter(!is.na(strand)) %>>%
-  dplyr::select(sample,allele,gene_symbol,chr,start,end,ref,alt,mutype,PolyPhen) %>>%
   left_join(have_y_sample) %>>%
   filter(is.na(Y)) %>>%
   dplyr::select(-Y)
@@ -576,15 +585,26 @@ variatn_lung %>>%
 
 #######################like GWAS plot###############################
 if(0){
+  strip_maf = function(infile) {
+  .colnames = c('Hugo_Symbol','Chromosome','Start_Position','End_Position','Reference_Allele','Tumor_Seq_Allele2',
+                'Consequence','PolyPhen',"cDNA_position","CDS_position","Protein_position",'Transcript_ID')
+  .cols = .colnames %>>%
+  {setNames(c('c','c','d','d','c','c', 'c','c','c','c','c','c'), .)} %>>%
+  {do.call(readr::cols_only, as.list(.))}
+  read_tsv(infile, comment='#', col_types=.cols) %>>%
+    classify_consequence() %>>%
+    dplyr::rename(gene_symbol=Hugo_Symbol,chr=Chromosome,start=Start_Position,end=End_Position,
+                  ref=Reference_Allele,alt=Tumor_Seq_Allele2) %>>%
+    left_join(topdriver_bed%>>%dplyr::select(gene_symbol,strand)) %>>%filter(!is.na(strand)) %>>%
+    filter(mutype!="flank",mutype!="splice_region") %>>%
+    filter(Consequence!="intron_variant") %>>%
+    filter(Consequence!="intron_variant,non_coding_transcript_variant")
+  }
 maf_1kg_all=maf_list %>>%
   mutate(maf=purrr::map(path,~strip_maf(.))) %>>%
   select(-path) %>>%
   unnest() %>>%
-  dplyr::rename(gene_symbol=Hugo_Symbol,chr=Chromosome,start=Start_Position,
-                end=End_Position,ref=Reference_Allele,alt=Tumor_Seq_Allele2) %>>%
-  left_join(topdriver_bed%>>%dplyr::select(gene_symbol,gene_start,gene_end,strand)) %>>%
   filter(!is.na(strand)) %>>%
-  dplyr::select(sample,allele,gene_symbol,chr,start,end,ref,alt,mutype,PolyPhen,Consequence) %>>%
   left_join(have_y_sample) %>>%
   filter(is.na(Y)) %>>%
   dplyr::select(-Y)
@@ -788,7 +808,6 @@ all_hwe_variant %>>% filter(mutype != "silent") %>>%
   ggplot()+
   geom_histogram(aes(x=p_value,fill=mutype),binwidth = 0.01)
 
-lung_norm_maf_all %>>%filter(chr==,start==)
 ##########################################################################
 ####  homo の数で比べてみたら？　#####
 test_fisher_1kg =function(.row){

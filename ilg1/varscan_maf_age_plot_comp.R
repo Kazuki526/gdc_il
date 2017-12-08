@@ -132,7 +132,7 @@ cancer_type_maf=read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/cancer_typ
 
 norm_maf = rbind(body_part_maf%>>%select(-body_part),cancer_type_maf) %>>%
   mutate(LOH=ifelse((soma_or_germ == "somatic" & LOH =="no" & ref != n_allele2),"back_mutation",LOH)) %>>%
-  mutate(cancer_type = ifelse((cancer_type=="COAD" | cancer_type=="READ"),"CRC",cancer_type))
+  mutate(cancer_type = ifelse((cancer_type=="COAD" | cancer_type=="READ"),"CRC",cancer_type)) 
 rm(body_part_maf,cancer_type_maf)
 
 #normalでaltalt, tumorでrefaltとなってる際にnormalでrefのdepth=0のものだけ採用！
@@ -147,7 +147,20 @@ varscan_error = norm_maf %>>%
 norm_maf = norm_maf %>>%
   filter(!(LOH == "back_mutation" & n_ref_count !=0 )) %>>%
   left_join(varscan_error %>>% filter(an_error >=100) %>>%rename(n_allele2=alt)) %>>%
-  filter(is.na(an_error)) %>>% dplyr::select(-an_error)
+  filter(is.na(an_error)) %>>% dplyr::select(-an_error)%>>%
+  filter(chr!="chrX")
+
+tally_norm_maf = norm_maf %>>%
+  filter(!(soma_or_germ=="somatic" & LOH=="no")) %>>%
+  tidyr::gather(allele,alt,n_allele1,n_allele2) %>>%
+  filter(ref != alt)%>>%
+  filter(!(chr=="chrX" & gender=="male" & allele=="n_allele1")) %>>%
+  mutate(homo=ifelse(n_genotype=="homo",ifelse(chr=="X" & gender=="male",0,1),0))%>>%
+  group_by(chr,start,end,ref,alt) %>>%
+  summarise(ac_cancer=n(),homo_cancer=sum(homo)/2,gene_symbol=first(gene_symbol),
+            Consequence=first(Consequence),PolyPhen=first(PolyPhen),mutype=first(mutype),
+            cDNA_position=first(cDNA_position),CDS_position=first(CDS_position)) %>>%
+  ungroup()
 ###################################################################################################
 ########## CNA data ##########
 #ascat data
@@ -168,18 +181,6 @@ cantype_ascat = data.frame(cancer_type = c("hnsc","ov","prad","thca","ucec")) %>
 annotate_ascat=rbind(bp_ascat,cantype_ascat)%>>%
   mutate(cancer_type = ifelse((cancer_type=="COAD" | cancer_type=="READ"),"CRC",cancer_type))
 rm(bp_ascat,cantype_ascat)
-
-tally_norm_maf = norm_maf %>>%
-  filter(!(soma_or_germ=="somatic" & LOH=="no")) %>>%
-  tidyr::gather(allele,alt,n_allele1,n_allele2) %>>%
-  filter(ref != alt)%>>%
-  filter(!(chr=="chrX" & gender=="male" & allele=="n_allele1")) %>>%
-  mutate(homo=ifelse(n_genotype=="homo",ifelse(chr=="X" & gender=="male",0,1),0))%>>%
-  group_by(chr,start,end,ref,alt) %>>%
-  summarise(ac_cancer=n(),homo_cancer=sum(homo)/2,gene_symbol=first(gene_symbol),
-            Consequence=first(Consequence),PolyPhen=first(PolyPhen),mutype=first(mutype),
-            cDNA_position=first(cDNA_position),CDS_position=first(CDS_position)) %>>%
-  ungroup()
 
 ####################################################################################################################
 ########## somatic mutation ############
@@ -387,13 +388,13 @@ d_maf = norm_maf %>>%
                                     -Protein_position,-strand,-t_genotype,-n_genotype) %>>%
   left_join(classed_site %>>%dplyr::select(-ac_cancer,-an_cancer,-homo_cancer,-ac_exac,-an_exac)) %>>%
   rbind(ref_minor_ef) %>>%
-  filter(MAF<0.005,MAF>=0.0005, mutype!="silent")
+  filter(MAF<0.005,MAF>=0.0005, mutype!="silent",cancer_type!="KICH")
 e_maf = norm_maf %>>%
   dplyr::select(-Transcript_ID,-t_depth,-t_ref_count,-t_alt_count,-n_depth,-n_ref_count,-n_alt_count,
                                     -Protein_position,-strand,-t_genotype,-n_genotype) %>>%
   left_join(classed_site %>>%dplyr::select(-ac_cancer,-an_cancer,-homo_cancer,-ac_exac,-an_exac)) %>>%
   rbind(ref_minor_ef) %>>%
-  filter(MAF<0.0005, mutype!="silent")
+  filter(MAF<0.0005, mutype!="silent",cancer_type!="KICH")
 
 #####################################################################################################################
 #####################################################################################################################
@@ -430,66 +431,78 @@ truncating_count = norm_maf %>>%
 ggsave("age_plot/cumulative/allgene_truncating.pdf",.plot,height = 15,width = 15)
 #遺伝子絞らないとな、、、、
 
+cumulative_plot = function(.tbl,.class){
 ##missense の数
-missense_count = classed_site %>>%
-  filter(AF_class ==3,mutype=="missense") %>>%
-  rename(n_allele2=alt) %>>%
-  left_join(norm_maf %>>%filter(mutype=="missense",!(soma_or_germ =="somatic" & LOH=="no"),
-                                cancer_type!="READ",cancer_type!="KICH")) %>>%
-  #left_join(cna_del_rank) %>>%filter(del_rank <40) %>>%
-  group_by(cancer_type,patient_id) %>>%
-  summarise(missense_num=n()) %>>%
-  mutate(missense_count=as.character(ifelse(missense_num >= 10,"10-",missense_num)),
-         missense_count_order=ifelse(missense_num >=10,10,missense_num))
+  missense_count = .tbl %>>%
+    dplyr::select(-alt) %>>%
+    left_join(norm_maf %>>%filter(mutype=="missense",!(soma_or_germ =="somatic" & LOH=="no"))) %>>%
+    left_join(driver_genes %>>%dplyr::select(gene,role)%>>%dplyr::rename(gene_symbol=gene)) %>>%
+    filter(role=="TSG") %>>%
+    group_by(cancer_type,patient_id) %>>%
+    summarise(missense_num=sum(MAC)) %>>%
+    #mutate(missense_num=missense_num %/% 3) %>>% #a_mafをやる時用
+    mutate(missense_count=as.character(ifelse(missense_num >= 10,"10-",missense_num)),
+           missense_count_order=ifelse(missense_num >=10,10,missense_num)) 
 #相関直線を
-regression = patient_list %>>%
-  left_join(missense_count) %>>%
-  mutate(missense_num=ifelse(is.na(missense_num),0,missense_num),
-         age = round(age/365.25*100)/100) %>>%
-  tidyr::nest(-cancer_type) %>>%
-  mutate(data = purrr::map(data,~as.data.frame(as.list(coef(lm(age ~ missense_num,data = .)))))) %>>%
-  unnest()
-write_df(regression,"age_plot/cumulative/class3_allgene_regression.tsv")
+  regression = patient_list %>>%
+    left_join(missense_count) %>>%
+    mutate(missense_num=ifelse(is.na(missense_num),0,missense_num),
+           age = round(age/365.25*100)/100) %>>%
+    tidyr::nest(-cancer_type) %>>%
+    mutate(data = purrr::map(data,~as.data.frame(as.list(coef(lm(age ~ missense_num,data = .)))))) %>>%
+    unnest()
+  write_df(regression,paste0("age_plot/cumulative/",.class,"regression.tsv"))
 ##バイオリンプロットで見やすく
-.plot = patient_list %>>%
-  left_join(missense_count) %>>%
-  mutate(missense_count = ifelse(is.na(missense_count),"0",missense_count),
-         missense_count_order = ifelse(is.na(missense_count_order),0,missense_count_order),
-         age=round(age/365.25*100)/100) %>>%
-  left_join(truncating_count) %>>%
-  mutate(truncating=ifelse(is.na(truncating_count),"not_have_truncating","have_truncating")) %>>%
-  filter(truncating=="not_have_truncating") %>>%
-  ggplot(aes(x=reorder(missense_count,missense_count_order), y=age))+
-  geom_violin()+
-  geom_boxplot(width=.3,fill="black")+ 
-  stat_summary(fun.y=mean,geom = "point", fill="white",shape=21,size=2)+
-  facet_wrap( ~ cancer_type, ncol = 5)+
-  #geom_abline(data = regression %>>%filter(missense_num > 0),
-  #            aes(intercept = X.Intercept.,slope = missense_num),colour = "blue")+
-  #geom_abline(data = regression %>>%filter(missense_num <= 0),
-  #            aes(intercept = X.Intercept.,slope = missense_num),colour = "red")+
-  ylim(0,90)+
-  geom_text(data =missense_count %>>%count(cancer_type,missense_count),
-            aes(x=missense_count,y=5,label=n),size=3,position="stack")+
-  theme(strip.text = element_text(size=6),axis.text.x = element_text(angle = -45, hjust = 0))
-.plot
-ggsave("age_plot/cumulative/allgene_missense_nosmooth.pdf",.plot,height = 15,width = 15)
+  .plot = patient_list %>>%
+    left_join(missense_count) %>>%
+    mutate(missense_count = ifelse(is.na(missense_count),"0",missense_count),
+           missense_count_order = ifelse(is.na(missense_count_order),0,missense_count_order),
+           age=round(age/365.25*100)/100) %>>%
+    left_join(truncating_count) %>>%
+    mutate(truncating=ifelse(is.na(truncating_count),"not_have_truncating","have_truncating")) %>>%
+    filter(truncating=="not_have_truncating") %>>%
+    ggplot(aes(x=reorder(missense_count,missense_count_order), y=age))+
+    geom_violin()+
+    geom_boxplot(width=.3,fill="black")+ 
+    stat_summary(fun.y=mean,geom = "point", fill="white",shape=21,size=2)+
+    facet_wrap( ~ cancer_type, ncol = 5)+
+    geom_abline(data = regression %>>%filter(missense_num > 0),
+                aes(intercept = X.Intercept.,slope = missense_num),colour = "blue")+
+    geom_abline(data = regression %>>%filter(missense_num <= 0),
+                aes(intercept = X.Intercept.,slope = missense_num),colour = "red")+
+    ylim(0,90)+
+    geom_text(data =missense_count %>>%count(cancer_type,missense_count),
+              aes(x=missense_count,y=5,label=n),size=3,position="stack")+
+    theme(strip.text = element_text(size=6),axis.text.x = element_text(angle = -45, hjust = 0))
+  .plot
+  ggsave(paste0("age_plot/cumulative/",.class,".pdf"),.plot,height = 15,width = 15)
+}
 
+mid_count = function(.tbl){
+  .tbl %>>%
+    mutate(alt_count = ifelse(n_allele2==ref,0,ifelse(n_allele1==ref,1,2))) %>>%
+    mutate(MAC =ifelse(AF !=MAF,2-alt_count,alt_count)) %>>%
+    dplyr::select(-alt_count)
+}
 
+a_maf %>>%mid_count%>>%cumulative_plot("a") #(この場合はcount数の表示をいじる必要がある)
+b_maf %>>%mid_count%>>%cumulative_plot("b")
+c_maf %>>%mid_count%>>%cumulative_plot("c")
+d_maf %>>%mutate(MAC=1) %>>%cumulative_plot("d")
+e_maf %>>%mutate(MAC=1) %>>%cumulative_plot("0.05")
 
+#bc
+rbind(b_maf,c_maf)%>>%mid_count()%>>%cumulative_plot("bc")
+#cd
+c_maf %>>%mid_count()%>>%rbind(d_mid %>>%mutate(MAC=1))%>>%cumulative_plot("cd")
+#de
+rbind(d_maf,e_maf) %>>%mutate(MAC=1) %>>%cumulative_plot("de")
 
-.plot = patient_list %>>%
-  left_join(missense_count) %>>%
-  mutate(missense_count = ifelse(is.na(missense_count),"0",missense_count),
-         missense_count_order = ifelse(is.na(missense_count_order),0,missense_count_order),
-         age=round(age/365.25*100)/100) %>>%
-  left_join(truncating_count) %>>%
-  mutate(truncating=ifelse(is.na(truncating_count),"not_have_truncating","have_truncating")) %>>%
-  filter(truncating=="not_have_truncating") %>>%
-  ggplot(aes(x=missense_count_order, y=age))+
-  geom_point()+
-  geom_smooth(method = "lm")+
-  facet_wrap( ~ cancer_type, ncol = 5)+
-  ylim(0,90)+
-  theme(strip.text = element_text(size=6),axis.text.x = element_text(angle = -45, hjust = 0))
-.plot
+#bcd
+rbind(b_maf,c_maf)%>>%mid_count()%>>%rbind(d_mid %>>%mutate(MAC=1))%>>%cumulative_plot("bcd")
+#cde
+rbind(d_maf,e_maf) %>>%mutate(MAC=1) %>>%rbind(c_maf%>>%mid_count())%>>%cumulative_plot("cde")
+
+#bcde
+rbind(b_maf,c_maf)%>>%mid_count()%>>%
+  rbind(rbind(d_maf,e_maf)%>>%mutate(MAC=1))%>>%cumulative_plot("bcde")

@@ -152,14 +152,14 @@ foreach my $dpls (@dpls){
 				if(!defined $af{$line[0]}{$line[1]}){$af{$line[0]}{$line[1]}=0;}
 				if($line[0] ne "X"){
 						foreach my $coln(@ok_patient_colum_num){
-								if($line[$coln] > 9){$af{$line[0]}{$line[1]} += 2;}
+								if($line[$coln] >= 8){$af{$line[0]}{$line[1]} += 2;}
 						}
 				}else{
 						foreach my $coln(@X_patient_colum_num){
-								if($line[$coln] > 9){$af{$line[0]}{$line[1]} += 2;}
+								if($line[$coln] >= 8){$af{$line[0]}{$line[1]} += 2;}
 						}
 						foreach my $coln(@Y_patient_colum_num){
-								if($line[$coln] > 9){$af{$line[0]}{$line[1]}++;}
+								if($line[$coln] >= 8){$af{$line[0]}{$line[1]}++;}
 						}
 				}
 		}
