@@ -95,7 +95,7 @@ foreach my $chr (@chr){
 														$info_tsv{"Hom$race"}=($an-$INFO{"Het$race"}-$INFO{"Hom$race"}*2)/2;
 												}elsif($race eq ""){
 														$info_tsv{"AC_Het"}=$INFO{"AC_Het"};
-														$info_tsv{"AC_Hom"}=($an-$INFO{"AC_Het"}-$INFO{"AC_Hom"}*2)/2;
+														$info_tsv{"AC_Hom"}=($INFO{"AN_Adj"}-$INFO{"AC_Het"}-$INFO{"AC_Hom"}*2)/2;
 												}
 										}
 										my @info_tsv=();

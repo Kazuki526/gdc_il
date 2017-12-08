@@ -36,6 +36,7 @@ while(<DG>){
 		if($_=~/^gene/){next;}
 		chomp;
 		my @line=split(/\t/,);
+		if($line[0] eq "GDF2"){next;} ### <<<===この遺伝子はGRCh38で逆向き(逆転写?)にgenomeにあるのでややこしいからどかす!!
 		$focal_genes{$line[0]}="ok";
 }
 close DG;
