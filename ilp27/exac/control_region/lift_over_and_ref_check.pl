@@ -145,7 +145,7 @@ foreach my $chr (@chr){
 						my $end=$line[1]+length($line[3]);
 						if($remap{"$line[0]:$line[1]-$end"} and $remap{"$line[0]:$line[1]-$end"}=~ /^([^:]+):(\d+)-(\d+)$/){
 								($chr,$pos,$end_pos)=($1,$2,$3 - 1);
-						}
+						}else{print "WARNINGS::there cant liftover $_\tso we dont use this variation\n";next;}
 						my $fasta=`samtools faidx /Users/kazuki/.vep/homo_sapiens/86_GRCh38/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz $chr:$pos-$end_pos`;
 						my ($region,$refseq)=split(/\n/,$fasta);
 						if($refseq eq $line[3]){
