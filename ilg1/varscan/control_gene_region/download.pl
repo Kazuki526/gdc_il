@@ -22,13 +22,10 @@ my ($response,$norm_manifest,$tumor_manifest,$project_json)=
 my $nkfpath=`which nkf`;chomp $nkfpath;
 ($nkfpath and -e $nkfpath) or die "ERROR:nkf was not installed. please do\nbrew install nkf\n";
 
-#check reference of bam are exist?
-my $ref="/Volumes/areca42TB/GRCh38.d1.vd1.fa.gz";
-(-e $ref)or die "ERROR:not exist ref fasta:$ref\n";
-
 #check top driver 105genes bed file exist?
-my $bed="$ENV{HOME}/git/gdc_il/ilg1/varscan/control_gene_region/.json";
-#(-e $bed) or die "ERROR:not exist bed file:$bed\n";
+my $bed="control_genes_bed100.json";
+if($bed =~/100/){print "WARNINGS::Now downloading only 100 genes. Its OK??\n";}
+(-e $bed) or die "ERROR:not exist bed file:$bed\n";
 
 #check existing bamslicing.pl
 my $download_pl="$ENV{HOME}/git/gdc_il/ilg1/download/bamslicing.pl";
@@ -60,7 +57,7 @@ close PL;
 open(RES,"$response");
 open(OUTN,">$norm_manifest");
 open(OUTT,">$tumor_manifest");
-print OUTN "id\tfile_name\n";print OUTT "id\tfile_name\n";
+print OUTN "id\tfilename\n";print OUTT "id\tfilename\n";
 my @header = split(/\t/,<RES>);chomp @header;
 my %header_num=();
 for(my $i=0;@header>$i;$i++){
@@ -85,8 +82,8 @@ close OUTN;
 close OUTT;
 
 
-#`perl $download_pl $norm_manifest $bed $project_dir/norm_bam`;
-#`perl $download_pl $tumor_manifest $bed $project_dir/tumor_bam`;
+system("perl $download_pl $norm_manifest $bed $project_dir/norm_bam");
+system("perl $download_pl $tumor_manifest $bed $project_dir/tumor_bam");
 
 
 

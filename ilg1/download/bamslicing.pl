@@ -1,12 +1,13 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
+use Parallel::ForkManager;
 
 ############   perl bamslicing.pl  MANIFEST BED_JSON OUT_DIR
 
 #input check?
-my ($manifes,$json,$out_dir)=@ARGV;
-if( $manifest !~/manifest/|$json !~/json$/){die "ERROR::input files are correct??\n");
+my ($manifest,$json,$out_dir)=@ARGV;
+if( $manifest !~/manifest/|$json !~/json$/){die "ERROR::input files are correct??\n";}
 (-e $out_dir) or die "ERROR::out dir is not exist!\n";
 
 #perl bamslicing.pl MANIFEST.tsv out_DIR maxparallel
@@ -21,12 +22,11 @@ my $token=`cat $token_path`;
 
 open(MAN,"$manifest");
 my $linen=0;
-use Parallel::ForkManager;
 my $max_processes=10;
 my $pm = new Parallel::ForkManager($max_processes);
-my $header=<MAN>;
+my $header=<MAN>;chomp $header;
 my @header = split(/\t/,$header);
-if($header[0] != "id"|$header[1] != "filename"){die "ERROR::manifest file colume is correct??\n";}
+if(($header[0] ne "id")||($header[1] ne "filename")){die "ERROR::manifest file colume is correct??\n";}
 
 open (ERR,">$out_dir/result_download.txt");
 while(<MAN>){
@@ -42,7 +42,7 @@ while(<MAN>){
 		if(!grep{$_ eq "$line[1]"}@ls){
 				print "$linen:curl $line[1] now\n";
 				print ERR "$linen:curl $line[1] now\n";
-				system("curl --header \"X-Auth-Token: $token\" --request POST https://gdc-api.nci.nih.gov/slicing/view/$line[0] --header \"Content-Type: application/json\" -d\@$json --output $our_dir/$line[1] > /dev/null 2>&1");
+				system("curl --header \"X-Auth-Token: $token\" --request POST https://api.gdc.cancer.gov/slicing/view/$line[0] --header \"Content-Type: application/json\" -d\@$json --output $out_dir/$line[1] > /dev/null 2>&1");
 		}
 		my $focal=0;
 		my $time=0;
@@ -61,7 +61,7 @@ while(<MAN>){
 						print ERR "$linen:$line[1] download error. download again\n";
 				}
 				if($focal==0){
-						system("curl --header \"X-Auth-Token: $token\" --request POST https://gdc-api.nci.nih.gov/slicing/view/$line[0] --header \"Content-Type: application/json\" -d\@$json --output $out_dir/$line[1] > /dev/null 2>&1");
+						system("curl --header \"X-Auth-Token: $token\" --request POST https://api.gdc.cancer.gov/slicing/view/$line[0] --header \"Content-Type: application/json\" -d\@$json --output $out_dir/$line[1] > /dev/null 2>&1");
 				}
 		}
 
