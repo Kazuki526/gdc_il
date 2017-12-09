@@ -98,9 +98,13 @@ while(<VCF>){
 										}else{#indelの時
 												my($posi,$ref_length,$alt_length,$ref,$alt)=
 													($line[1],length($line[3]),length($alt[$i]),$line[3],$alt[$i]);
-												while($ref_length>1 and $alt_length>1){
+												while($ref_length>1 and $alt_length>1 and substr($ref,0,1) eq substr($alt,0,1)){
 														($ref,$alt) = map{$_=substr($_,1)}($ref,$alt);
 														--$ref_length;--$alt_length;++$posi;
+												}
+												while($ref_length>1,and $alt_length>1 and substr($ref,-1,1) eq substr($alt,-1,1)){
+														($ref,$alt) = map{$_=substr($_,0,-1)}($ref,$alt);
+														--$ref_length;--$alt_length;
 												}
 												print OUTVI join("\t",($line[0],$posi,".",$ref,$alt,$line[5],$line[6]))."\t";
 												my @info_out=();
