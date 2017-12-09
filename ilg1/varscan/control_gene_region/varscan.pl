@@ -15,10 +15,6 @@ my$nobam="$pj/norm_bam";	#norm bam directori
 my $ref="/Volumes/areca42TB/GRCh38.d1.vd1.fa";
 (-e $ref)or die "ERROR:not exist ref fasta:$ref\n";
 
-#check top driver 105genes bed file exist?
-my $bed="$ENV{HOME}/git/gdc_il/ilg1/varscan/control_gene_region/.bed";
-(-e $bed) or die "ERROR:not exist bed file:$bed\n";
-
 #check pj ascat file exist ?
 my $ascat_file="/Volumes/areca42TB/tcga/CNA/$bodypart{$pj}/cel/annotate_ascat.tsv.gz";
 (-e $ascat_file)or die "ERROR:not exist ascat file:$ascat_file\n";
@@ -109,12 +105,17 @@ foreach my $pid(keys %data){
 				my @bam=split(/;/,$data{$pid}{norm_bam});
 				`samtools merge -f $nobam/$pid.bam @bam`;
 				`samtools index $nobam/$pid.bam`;
-				$data{$pid}{'file_norm'}="$nobam/$pid.bam";}
+				$data{$pid}{'file_norm'}="$nobam/$pid.bam";
+		}else{
+				$data{$pid}{'file_norm'}=$data{$pid}{norm_bam};
+		}
 		if($data{$pid}{tumor_bam} =~ /;/){
 				my @bam=split(/;/,$data{$pid}{tumor_bam});
 				`samtools merge -f $tubam/$pid.bam @bam`;
 				`samtools index $tubam/$pid.bam`;
 				$data{$pid}{'file_tumor'}="$tubam/$pid.bam";
+		}else{
+				$data{$pid}{'file_tumor'}=$data{$pid}{tumor_bam};
 		}
 }
 

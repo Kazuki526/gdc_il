@@ -8,9 +8,10 @@ my $project = uc $ARGV[0];
 my @focal_project =qw(BRCA CRC GBM HNSC KCC LGG LUAD LUSC OV PRAD THCA UCEC);
 if(!grep{$_ eq $project}@focal_project){ die "ERROR::project is correct?? $project\n";}
 my $project_dir = lc $project;
-my $project_list = "TCGA-$project";
-if($project eq "KCC"){$project_list ="TCGA-KIRC,TCGA-KIRP,TCGA-KICH";
-}elsif($project eq "CRC"){$project_list="TCGA-COAD,TCGA-READ";}
+my $project_list = "\\\"TCGA-$project\\\"";
+if($project eq "KCC"){$project_list ="[\\\"TCGA-KIRC\\\",\\\"TCGA-KIRP\\\",\\\"TCGA-KICH\\\"]";
+}elsif($project eq "CRC"){$project_list="[\\\"TCGA-COAD\\\",\\\"TCGA-READ\\\"]";}
+#sedする際にshに送られるコマンドに\が残る用に\\で\をエスケープし\"で"をエスケープしている
 my ($response,$norm_manifest,$tumor_manifest,$project_json)=
 	("$project_dir/$project_dir"."_response.tsv",
 	"$project_dir/norm_bam/$project_dir"."norm_manifest.tsv",
@@ -37,7 +38,7 @@ my $sample_json="$ENV{HOME}/git/gdc_il/ilg1/varscan/control_gene_region/sample_b
 mkdir "$project_dir";
 mkdir "$project_dir/norm_bam";
 mkdir "$project_dir/tumor_bam";
-`cat $sample_json|sed s/PROJECT/$project_list/ >$project_json`;
+`cat $sample_json|sed s/\\\"PROJECT\\\"/$project_list/ >$project_json`;
 `curl --request POST --header \"Content-Type: application/json\" --data \@$project_json 'https://gdc-api.nci.nih.gov/files'|nkf -Lu >$response`;
 
 
