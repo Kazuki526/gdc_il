@@ -72,6 +72,7 @@ foreach my $chr (@chr){
 												my $an=$INFO{"AN$race"};
 												$info_tsv{"AC$race"}=$an-$ac;
 										}
+#@info_outはvcf用@info_outはタブ区切りのlikevcf用
 										my @info_tsv=();
 										foreach(@info_ac){if(defined $info_tsv{$_}){push(@info_tsv,$info_tsv{$_});}else{push(@info_tsv,"NA");}}
 										map{push(@info_tsv,$INFO{$_})}@info_an;
@@ -92,10 +93,10 @@ foreach my $chr (@chr){
 												$info_tsv{"AC$race"}=$an-$ac;
 												if(($race ne "")&&($race ne "_Adj")){
 														$info_tsv{"Het$race"}=$INFO{"Het$race"};
-														$info_tsv{"Hom$race"}=($an-$INFO{"Het$race"}-$INFO{"Hom$race"}*2)/2;
+														$info_tsv{"Hom$race"}=($an-$INFO{"Het$race"}-$INFO{"AC$race"})/2;
 												}elsif($race eq ""){
 														$info_tsv{"AC_Het"}=$INFO{"AC_Het"};
-														$info_tsv{"AC_Hom"}=($INFO{"AN_Adj"}-$INFO{"AC_Het"}-$INFO{"AC_Hom"}*2)/2;
+														$info_tsv{"AC_Hom"}=($INFO{"AN_Adj"}-$INFO{"AC_Het"}-$INFO{"AC_Adj"})/2;
 												}
 										}
 										my @info_tsv=();
