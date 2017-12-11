@@ -66,7 +66,7 @@ for(my $i=0;@header>$i;$i++){
 while(<RES>){
 		chomp;
 		my @line=split(/\t/,);
-		if((!defined $patient_focal{$line[$header_num{case_id}]})&&(defined$error_file{$line[$header_num{file}]})){next;}
+		if((!defined $patient_focal{$line[$header_num{case_id}]})||(defined$error_file{$line[$header_num{file}]})){next;}
 		if($line[$header_num{sample_type}] eq "Primary Tumor"){
 				if(defined $data{$line[$header_num{case_id}]}{tumor_bam}){
 						$data{$line[$header_num{case_id}]}{tumor_bam}.=";$tubam/$line[$header_num{file}]";
@@ -107,6 +107,7 @@ foreach my $pid(keys %data){
 				`samtools index $nobam/$pid.bam`;
 				$data{$pid}{'file_norm'}="$nobam/$pid.bam";
 		}else{
+				`samtools index $data{$pid}{norm_bam}`;
 				$data{$pid}{'file_norm'}=$data{$pid}{norm_bam};
 		}
 		if($data{$pid}{tumor_bam} =~ /;/){
@@ -115,6 +116,7 @@ foreach my $pid(keys %data){
 				`samtools index $tubam/$pid.bam`;
 				$data{$pid}{'file_tumor'}="$tubam/$pid.bam";
 		}else{
+				`samtools index $data{$pid}{tumor_bam}`;
 				$data{$pid}{'file_tumor'}=$data{$pid}{tumor_bam};
 		}
 }
