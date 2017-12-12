@@ -36,16 +36,16 @@ open(TE,"grep \"download more than 10 times so this file cannot download?\" $pj/
 die "ERROR:there is not exist tumor download error list file download_errored_file.txt!!\n";
 while(<TE>){
 		chomp;
-		if($_ =~ /\d+:(\S+)\sdownload more than 10 times so this file cannot download?$/){
+		if($_ =~ /7:(\S+)\sdownload more than 10 times so this file cannot download?$/){
 				$error_file{$1}="error";
 		}
 }
 close TE;
-open(NE,"grep \"download more than 10 times so this file cannot download?\" $pj/tumor_bam/result_download.txt|") or 
+open(NE,"grep \"download more than 10 times so this file cannot download?\" $pj/norm_bam/result_download.txt|") or 
 die "ERROR:there is not exist normal download error list file download_errored_file.txt!!\n";
 while(<NE>){
 		chomp;
-		if($_ =~ /\d+:(\S+)\sdownload more than 10 times so this file cannot download?$/){
+		if($_ =~ /7:(\S+)\sdownload more than 10 times so this file cannot download?$/){
 				$error_file{$1}="error";
 		}
 }
@@ -126,9 +126,8 @@ my$num=1;
 foreach my $pid(keys %data){
 		if($data{$pid}{focal} eq "no"){print "$pid cannot download both tumor & normal files\n";}
 		print "$num:varscan $pid\n";
-		my $normpile = "samtools mpileup -q 10 -f $ref $data{$pid}{file_norm}";
-		my $tumorpile= "samtools mpileup -q 10 -f $ref $data{$pid}{file_tumor}";
-		`zsh -c \"varscan somatic <\($normpile\) <\($tumorpile\) $pj/vcf/$pid --tumor-purity $data{$pid}{purity} --p-value 0.1 --output-vcf 1\"`;
+		my $mpile = "samtools mpileup -q 10 -f $ref $data{$pid}{file_norm} $data{$pid}{file_tumof}";
+		`zsh -c \"varscan somatic <\($mpile\) $pj/vcf/$pid --tumor-purity $data{$pid}{purity} --p-value 0.1 --output-vcf 1 --mpileup 1\"`;
 }
 exit;
 
