@@ -125,7 +125,7 @@ mkdir "$pj/vcf";
 my$num=0;
 foreach my $pid(keys %data){
 		$num++;
-		if($data{$pid}{focal} eq "no"){print "$pid cannot download both tumor & normal files\n";}
+		if($data{$pid}{focal} eq "no"){print "$pid cannot download both tumor & normal files\n";next;}
 		print "$num:varscan $pid\n";
 		my $mpile = "samtools mpileup -q 10 -f $ref $data{$pid}{file_norm} $data{$pid}{file_tumor}";
 		`zsh -c \"varscan somatic <\($mpile\) $pj/vcf/$pid --tumor-purity $data{$pid}{purity} --p-value 0.1 --output-vcf 1 --mpileup 1\"`;
