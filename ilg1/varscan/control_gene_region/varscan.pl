@@ -36,7 +36,7 @@ open(TE,"grep \"download more than 10 times so this file cannot download?\" $pj/
 die "ERROR:there is not exist tumor download error list file download_errored_file.txt!!\n";
 while(<TE>){
 		chomp;
-		if($_ =~ /7:(\S+)\sdownload more than 10 times so this file cannot download?$/){
+		if($_ =~ /7:(\S+)\sdownload more than 10 times so this file cannot download\?$/){
 				$error_file{$1}="error";
 		}
 }
@@ -45,7 +45,7 @@ open(NE,"grep \"download more than 10 times so this file cannot download?\" $pj/
 die "ERROR:there is not exist normal download error list file download_errored_file.txt!!\n";
 while(<NE>){
 		chomp;
-		if($_ =~ /7:(\S+)\sdownload more than 10 times so this file cannot download?$/){
+		if($_ =~ /7:(\S+)\sdownload more than 10 times so this file cannot download\?$/){
 				$error_file{$1}="error";
 		}
 }
@@ -91,7 +91,7 @@ my $patient_id="";
 while(<ASCAT>){
 		chomp;
 		my @line=split(/\t/,);
-		if(($line[1] eq $patient_id)&&(!defined$patient_focal{$line[1]})){next;}
+		if(($line[1] eq $patient_id)||(!defined$patient_focal{$line[1]})){next;}
 		$patient_id=$line[1];
 		$data{$patient_id}{'purity'}=$line[12];
 }
@@ -122,11 +122,12 @@ foreach my $pid(keys %data){
 }
 
 mkdir "$pj/vcf";
-my$num=1;
+my$num=0;
 foreach my $pid(keys %data){
+		$num++;
 		if($data{$pid}{focal} eq "no"){print "$pid cannot download both tumor & normal files\n";}
 		print "$num:varscan $pid\n";
-		my $mpile = "samtools mpileup -q 10 -f $ref $data{$pid}{file_norm} $data{$pid}{file_tumof}";
+		my $mpile = "samtools mpileup -q 10 -f $ref $data{$pid}{file_norm} $data{$pid}{file_tumor}";
 		`zsh -c \"varscan somatic <\($mpile\) $pj/vcf/$pid --tumor-purity $data{$pid}{purity} --p-value 0.1 --output-vcf 1 --mpileup 1\"`;
 }
 exit;

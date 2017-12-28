@@ -60,11 +60,13 @@ while(<RES>){
 		my @line=split(/\t/,);
 		if(! defined $patient_focal{$line[$header_num{case_id}]}){next;}
 		if($line[$header_num{sample_type}] eq "Primary Tumor"){
-				my @files=map{if(!-e "$pj$_"){die "ERROR:dir $pj$_ is not exist!!\n"}else{"$pj$_/tumor_bam/$line[$header_num{file_id}]"}@group;
-				`samtools merge $pj/tumor_bam/$line[$header_num{file_id}] @files`;
+				my @files=map{if(!-e "$pj$_"){die "ERROR:dir $pj$_ is not exist!!\n"}else{"$pj$_/tumor_bam/$line[$header_num{file}]"}}@group;
+				print "merge tumor_bam/$line[$header_num{file}]\n";
+				`samtools merge $pj/tumor_bam/$line[$header_num{file}] @files`;
 		}else{
-				my @files=map{if(!-e "$pj$_"){die "ERROR:dir $pj$_ is not exist!!\n"}else{"$pj$_/norm_bam/$line[$header_num{file_id}]"}@group;
-				`samtools merge $pj/norm_bam/$line[$header_num{file_id}] @files`;
+				my @files=map{if(!-e "$pj$_"){die "ERROR:dir $pj$_ is not exist!!\n"}else{"$pj$_/norm_bam/$line[$header_num{file}]"}}@group;
+				print "merge norm_bam/$line[$header_num{file}]\n";
+				`samtools merge $pj/norm_bam/$line[$header_num{file}] @files`;
 		}
 }
 close RES;
@@ -77,7 +79,7 @@ foreach my $group (@group){
 				die "ERROR:there is not exist tumor download error list file download_errored_file.txt!!\n";
 		while(<TE>){
 				chomp;
-				if($_ =~ /\d+:(\S+)\sdownload more than 10 times so this file cannot download?$/){
+				if($_ =~ /\d+:(\S+)\sdownload more than 10 times so this file cannot download\?$/){
 						$error_file{tumor_bam}{$1}++;
 				}
 		}
@@ -86,16 +88,16 @@ foreach my $group (@group){
 				die "ERROR:there is not exist normal download error list file download_errored_file.txt!!\n";
 		while(<NE>){
 				chomp;
-				if($_ =~ /\d+:(\S+)\sdownload more than 10 times so this file cannot download?$/){
-						$error_file{norm_bam}{$1}=++;
+				if($_ =~ /\d+:(\S+)\sdownload more than 10 times so this file cannot download\?$/){
+						$error_file{norm_bam}{$1}++;
 				}
 		}
 		close NE;
 }
 
 foreach my$nt(keys %error_file){
-		foreach my$file(keys%{$erro_file{$nt}}){
-				if($nt="norm_bam"){
+		foreach my$file(keys%{$error_file{$nt}}){
+				if($nt eq "norm_bam"){
 						print OUTN "$error_file{$nt}{$file}:$file download more than 10 times so this file cannot download?\n";
 				}else{
 						print OUTT "$error_file{$nt}{$file}:$file download more than 10 times so this file cannot download?\n";

@@ -48,11 +48,12 @@ while(<MAN>){
 		my $time=0;
 		while($focal==0){
 				$time++;
+				my $sam_head = `samtools view $out_dir/$line[1] 2>&1|head -n 1`;
 				if($time >10){
 						print "$linen:$line[1] download more than 10 times so this file cannot download?\n";
 						print ERR "$linen:$line[1] download more than 10 times so this file cannot download?\n";
 						$focal++;
-				}elsif(`samtools view $out_dir/$line[1] 2>&1|head -n 1` !~ /EOF\smarker\sis\sabsent/){
+				}elsif(($sam_head !~ /EOF\smarker\sis\sabsent/) && ($sam_head !~ /Parse\serror/)){
 						$focal++;
 						print "$linen:$line[1] downloaded is ok\n";
 						print ERR "$linen:$line[1] downloaded is ok\n";
