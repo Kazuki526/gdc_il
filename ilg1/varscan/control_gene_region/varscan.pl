@@ -6,7 +6,7 @@ use strict;
 
 my $pj=$ARGV[0];#project_id
 #ASCAT data is bodypart dir
-my %bodypart=("hnsc" =>"hnsc","ov"=>"ov","prac"=>"prad","thca"=>"thca","ucec"=>"ucec",
+my %bodypart=("hnsc" =>"hnsc","ov"=>"ov","prad"=>"prad","thca"=>"thca","ucec"=>"ucec",
 		"brca"=>"breast","crc"=>"colorectal","kcc"=>"kidney","luad"=>"lung","lusc"=>"lung","gbm"=>"brain","lgg"=>"brain");
 my$tubam="$pj/tumor_bam";	#tumor bam directori
 my$nobam="$pj/norm_bam";	#norm bam directori

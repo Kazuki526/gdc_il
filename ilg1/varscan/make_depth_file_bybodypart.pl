@@ -17,8 +17,8 @@ sub main ( $ ){
 				my $path="/Volumes/areca42TB2/gdc/";
 		my $bam_dir=$path."tumor_bam/$pj";
 		my $response = $path."varscan/$pj/response_tumor.tsv";
+		#read response_file and make %info{patient_id}-{file}&{gender}
 		open(RES,$response)or die "ERROR:cannot open $response\n";
-		
 		my $colums=<RES>;chomp $colums;
 		my @colum=split(/\t/,$colums);
 		my($file_name,$case_id,$gender)=("","","");
