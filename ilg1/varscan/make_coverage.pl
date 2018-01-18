@@ -4,8 +4,8 @@ use warnings;
 
 ############ usage:: perl make_coverage.pl ################
 
-my %mid_af=();
 #read AF=5~% site list file AF_mid_list.tsv => make %mid_af{chr}{start}{ref}{alt}=focal is "ok"
+my %mid_af=();
 my $mid_af_list="/Volumes/areca42TB/tcga/all_patient/AF_mid_list.tsv";
 (-e $mid_af_list) or die "ERROR:AF_mid_list.tsv is not exist!!\n";
 open(MA,$mid_af_list);
@@ -82,8 +82,9 @@ sub main ( $ ){
 		my %coverage_xmale=();
 		#read norm depth file
 		my @dpls=`ls $dp_dir|grep out|grep -v tout`;chomp @dpls;
-		my %dp_focal=();
+		my %dp_focal=(); #if defined dpfocal is coverage=ok at normal sequence
 		foreach my $dp_file(@dpls){
+				print "read $pj:$dp_file\n";
 				$|=1; #バッファのフラッシュ
 				open(DP,"$dp_dir/$dp_file");
 				my $dpcolum=<DP>;chomp$dpcolum;
@@ -101,6 +102,7 @@ sub main ( $ ){
 		#read tumor depth file
 		my @dplst=`ls $dp_dir|grep tout`;chomp @dplst;
 		foreach my $dp_file(@dplst){
+				print "read $pj:$dp_file\n";
 				$|=1; #バッファのフラッシュ
 				my @male=();
 				open(DP,"$dp_dir/$dp_file");
@@ -113,16 +115,15 @@ sub main ( $ ){
 						chomp;
 						my @line=split(/\t/,);
 						$line[0] =~s/^chr//;
-						if(!defined $coverage{$line[0]}{$line[1]}){$coverage{$line[0]}{$line[1]}=0;}
 						if($line[0] ne "X"){
 								for(my $i=2;@line>$i;$i++){
 										if(($line[$i] >=8)&&(defined $dp_focal{$line[0]}{$line[1]}{$dpcolum[$i]})){
-														$coverage{$line[0]}{$line[1]}{$info{$dpcolum[$i]}{cancer_type}}{$info{$dpcolum[$i]}{race}}+=2;
-														if(defined $mid_af{"chr$line[0]"}{$line[1]}){
-																print OUTS "$dpcolum[$i]\t$info{$dpcolum[$i]}{age}\t$info{$dpcolum[$i]}{gender}\tchr$line[0]\t$line[1]\tok\n";
-														}
+												$coverage{$line[0]}{$line[1]}{$info{$dpcolum[$i]}{cancer_type}}{$info{$dpcolum[$i]}{race}}+=2;
+												if(defined $mid_af{"chr$line[0]"}{$line[1]}){
+														print OUTS "$dpcolum[$i]\t$info{$dpcolum[$i]}{age}\t$info{$dpcolum[$i]}{gender}\tchr$line[0]\t$line[1]\tok\n";
+												}
 										}elsif(defined $mid_af{"chr$line[0]"}{$line[1]}){
-														print OUTS "$dpcolum[$i]\t$info{$dpcolum[$i]}{age}\t$info{$dpcolum[$i]}{gender}\tchr$line[0]\t$line[1]\tno\n";
+												print OUTS "$dpcolum[$i]\t$info{$dpcolum[$i]}{age}\t$info{$dpcolum[$i]}{gender}\tchr$line[0]\t$line[1]\tno\n";
 										}
 								}
 						}else{
