@@ -33,6 +33,7 @@ classify_consequence = function(.data) {
          mutype= dplyr::recode(Consequence,
                                downstream_gene_variant = 'flank',
                                `3_prime_UTR_variant` = 'flank',
+                               `3_prime_UTR_variant,NMD_transcript_variant`='NMD',
                                upstream_gene_variant = 'flank',
                                `5_prime_UTR_variant` = 'flank',
                                frameshift_variant = 'truncating',
@@ -54,8 +55,10 @@ classify_consequence = function(.data) {
                                `coding_sequence_variant,3_prime_UTR_variant`='flank',
                                `coding_sequence_variant,5_prime_UTR_variant`='flank',
                                `stop_gained,frameshift_variant` = 'truncating',
+                               `stop_gained,frameshift_variant,start_lost` = 'truncating',
                                `missense_variant,splice_region_variant`='missense',
                                `intron_variant,non_coding_transcript_variant`='silent',
+                               `intron_variant,NMD_transcript_variant`='NMD',
                                `non_coding_transcript_exon_variant,non_coding_transcript_variant`='silent',
                                `frameshift_variant,splice_region_variant`='truncating',
                                `frameshift_variant,start_lost`='truncating',
@@ -63,19 +66,25 @@ classify_consequence = function(.data) {
                                `inframe_deletion,splice_region_variant`='splice_region',
                                `inframe_insertion,splice_region_variant`='splice_region',
                                `frameshift_variant,stop_lost,splice_region_variant`='truncating',
+                               `frameshift_variant,stop_retained_variant`='inframe_indel',
                                `protein_altering_variant,splice_region_variant`='inframe_indel',
                                `splice_acceptor_variant,intron_variant`='splice',
                                `splice_acceptor_variant,coding_sequence_variant`='splice',
                                `splice_acceptor_variant,coding_sequence_variant,intron_variant`='splice',
+                               `splice_acceptor_variant,5_prime_UTR_variant`='splice',
                                `splice_donor_variant,coding_sequence_variant`='splice',
                                `splice_donor_variant,coding_sequence_variant,intron_variant`='splice',
                                `splice_donor_variant,intron_variant`='splice',
-                               `splice_donor_variant,3_prime_UTR_variant,intron_variant`='flank',
+                               `splice_donor_variant,3_prime_UTR_variant,intron_variant`='splice',
+                               `splice_donor_variant,5_prime_UTR_variant`='splice',
+                               `splice_donor_variant,coding_sequence_variant,3_prime_UTR_variant`='splice',
                                `splice_region_variant,5_prime_UTR_variant`='flank',
                                `splice_region_variant,3_prime_UTR_variant`='flank',
                                `splice_region_variant,intron_variant` = 'splice_region',
                                `splice_region_variant,synonymous_variant`='silent',
+                               `splice_region_variant,stop_retained_variant`='silent',
                                `start_lost,inframe_deletion`='truncating',
+                               `start_lost,splice_region_variant`='truncating',
                                `stop_lost,inframe_deletion`='truncating',
                                `stop_gained,protein_altering_variant`='truncating',
                                `stop_gained,frameshift_variant,splice_region_variant`='truncating',
@@ -89,21 +98,20 @@ driver_genes=read_tsv("~/git/driver_genes/driver_genes.tsv")%>>%
   mutate(role=ifelse(is.na(role),"TSG",role))
 
 all_patient_info=read_tsv("~/git/all_patient/all_patient_response.tsv") %>>%
-  dplyr::rename(patient_id=submitter_id)
-###################################################################################################################
-#prepare  EXAC(nonTCGA) data sets
-vcf_exac=read_tsv("/Volumes/areca42TB/exac/file/exac_nontcga_liftovered_checked_likevcf.tsv.gz",
-                  col_types = "cdccdd") %>>%dplyr::rename(start=posi)
-vcf_exac_indel=read_tsv("/Volumes/areca42TB/exac/file/exac_nontcga_liftovered_checked_likevcf_indel.tsv.gz",
-                        col_types = "cdccdd") %>>%dplyr::rename(start=posi)
-vcf_exac =rbind(vcf_exac,vcf_exac_indel) %>>%mutate(chr=paste0("chr",chr))
-rm(vcf_exac_indel)
-
-
+  dplyr::rename(patient_id=submitter_id,age=diagnoses.0.age_at_diagnosis,gender=demographic.gender,
+                race=demographic.race,ethnicity=demographic.ethnicity)
+patient_race = all_patient_info %>>%
+  mutate(race_=ifelse(race=="white" &ethnicity!="hispanic or latino","white",
+                      ifelse(race=="black or african american" &ethnicity!="hispanic or latino",
+                             "black","other"))) %>>%
+  mutate(race_ = ifelse(is.na(race_),"other",race_)) %>>%
+  dplyr::select(patient_id,race_) %>>%
+  dplyr::rename(race=race_)
 
 ########################################################
 ################ germline mutation #####################
 ########################################################
+if(0){
 extract_norm_maf=function(.bp){
   .colnames = c('Hugo_Symbol','Chromosome','Start_Position','End_Position','Reference_Allele','Tumor_Seq_Allele1',
                 'Tumor_Seq_Allele2',"Match_Norm_Seq_Allele1","Match_Norm_Seq_Allele2",
@@ -131,7 +139,6 @@ extract_norm_maf=function(.bp){
     mutate(LOH=ifelse((t_genotype=="homo")&(n_genotype=="hetero"),"LOH","no"))
   
 }
-if(0){
   data.frame(body_part=c("breast","brain","lung","kidney","colorectal")) %>>%
     mutate(purrr::map(body_part,~extract_norm_maf(.))) %>>%
     unnest() %>>%
@@ -143,14 +150,16 @@ if(0){
     write_df("/Volumes/areca42TB2/gdc/varscan/all_patient/cancer_type_all.maf.gz")
 }
 
-body_part_maf=read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/body_part_all.maf.gz") %>>%
+#body_part_maf=read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/body_part_all.maf.gz") %>>%
+body_part_maf=read_tsv("/Volumes/areca42TB/tcga/all_patient/body_part_all.maf.gz") %>>%
   filter(mutype!="flank",mutype!="splice_region") %>>%
   filter(Consequence!="intron_variant") %>>%
   filter(Consequence!="intron_variant,non_coding_transcript_variant") %>>%
   dplyr::select(-filename) %>>%
   left_join(all_patient_info %>>%dplyr::select(patient_id,cancer_type))
 
-cancer_type_maf=read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/cancer_type_all.maf.gz") %>>%
+#cancer_type_maf=read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/cancer_type_all.maf.gz") %>>%
+cancer_type_maf=read_tsv("/Volumes/areca42TB/tcga/all_patient/cancer_type_all.maf.gz") %>>%
   filter(mutype!="flank",mutype!="splice_region") %>>%
   filter(Consequence!="intron_variant") %>>%
   filter(Consequence!="intron_variant,non_coding_transcript_variant") %>>%
@@ -163,31 +172,12 @@ norm_maf_all = rbind(body_part_maf%>>%select(-body_part),cancer_type_maf) %>>%
   mutate(cancer_type = ifelse((cancer_type=="KIRC" | cancer_type=="KIRP" | cancer_type=="KICH"),"KCC",cancer_type))
 rm(body_part_maf,cancer_type_maf)
 
-#normalでaltalt, tumorでrefaltとなってる際にnormalでrefのdepth=0のものだけ採用！
-#また同じサイトでこのエラーが有意に多い(100patient以上の)siteは解析に使用しないことにした。(3site)
-varscan_error = norm_maf_all %>>%
-  filter(LOH == "back_mutation", n_ref_count != 0) %>>%
-  dplyr::rename(alt = n_allele2) %>>%
-  group_by(chr,start,end,ref,alt) %>>%
-  summarise(an_error = n()*2) %>>%
-  ungroup()
+####################################
+### read coverage files ####
+coverage_all = read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/coverage_all.tsv.gz")
+coverage_male_x = read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/coverage_X_male.tsv.gz")
 
-norm_maf = norm_maf_all %>>%
-  filter(!(LOH == "back_mutation" & n_ref_count !=0 )) %>>%
-  left_join(varscan_error %>>% filter(an_error >=100) %>>%rename(n_allele2=alt)) %>>%
-  filter(is.na(an_error)) %>>% dplyr::select(-an_error)
-
-##### somaticでrecurrentなmutationはgermで起こっているとは考えにくい（様々なエラーが考えられる）
-#いちおうEXACでAF>1%となっているsiteはこれに含めない
-somatic_recurrent = norm_maf_all%>>%
-  filter(soma_or_germ=="somatic",LOH=="no")%>>%
-  count(gene_symbol,chr,start,end,ref,t_allele2)%>>%
-  dplyr::rename(alt=t_allele2)%>>%
-  filter(n>10)
-#### この領域を取り除くのはduplicate領域を取り除いてからにするのでもっと下の方でやっている。
-
-
-tally_norm_maf = norm_maf %>>%
+tally_norm_maf = norm_maf_all%>>%
   #filter(cancer_type != "KICH") %>>%
   filter(!(soma_or_germ=="somatic" & LOH=="no")) %>>%
   tidyr::gather(allele,alt,n_allele1,n_allele2) %>>%
@@ -195,30 +185,40 @@ tally_norm_maf = norm_maf %>>%
   filter(!(chr=="chrX" & gender=="male" & allele=="n_allele1")) %>>%
   mutate(homo=ifelse(n_genotype=="homo",ifelse(chr=="X" & gender=="male",0,1),0))%>>%
   group_by(chr,start,end,ref,alt) %>>%
-  summarise(ac_cancer=n(),homo_cancer=sum(homo)/2,gene_symbol=first(gene_symbol),
+  summarise(ac_cancer=n(),hom_cancer=sum(homo)/2,gene_symbol=first(gene_symbol),
             Consequence=first(Consequence),PolyPhen=first(PolyPhen),mutype=first(mutype),
             cDNA_position=first(cDNA_position),CDS_position=first(CDS_position)) %>>%
-  ungroup()
-###################################################################################################
-########## CNA data ##########
-#ascat data
-extract_ascat = function(.bp){
-  read_tsv(paste0("/Volumes/areca42TB/tcga/CNA/",.bp,"/cel/annotate_ascat.tsv.gz"),
-           col_types = "ccddcdddddddd")
-}
-bp_ascat = data.frame(bp = c("breast","brain","lung","kidney","colorectal")) %>>%
-  mutate(purrr::map(bp,~extract_ascat(.))) %>>%
-  unnest() %>>%
-  left_join(all_patient_info %>>%dplyr::select(patient_id,cancer_type)) %>>%
-  dplyr::select(-bp)
-cantype_ascat = data.frame(cancer_type = c("hnsc","ov","prad","thca","ucec")) %>>%
-  mutate(purrr::map(cancer_type, ~extract_ascat(.))) %>>%
-  mutate(cancer_type = toupper(cancer_type)) %>>%
-  unnest()
+  ungroup() %>>%
+  left_join(coverage_all) %>>%left_join(coverage_male_x) %>>%
+  mutate(an_male_cancer = ifelse(is.na(an_male_cancer),0,an_male_cancer)) %>>%
+  mutate(an_cancer = an_cancer - an_male_cancer) %>>%dplyr::select(-an_male_cancer)
 
-annotate_ascat=rbind(bp_ascat,cantype_ascat)%>>%
-  mutate(cancer_type = ifelse((cancer_type=="COAD" | cancer_type=="READ"),"CRC",cancer_type))
-rm(bp_ascat,cantype_ascat)
+
+#####################################################################################################################
+#### patient number ####
+norm_maf_all%>>%
+  dplyr::count(cancer_type,patient_id) %>>%
+  dplyr::select(-n) %>>%
+  dplyr::count(cancer_type) %>>%
+  #KICH=66 so delete
+  #filter(cancer_type != "KICH") %>>%
+  (?sum(.$n))
+
+### patient list ###
+patient_list = norm_maf_all %>>%
+  dplyr::count(cancer_type,patient_id,age,gender) %>>%
+  dplyr::select(-n) %>>%
+  filter(!is.na(age))
+#write_df(patient_list,"/Volumes/areca42TB/tcga/all_patient/patient_list.tsv")
+#### AF > 5% のsiteのcoverage(patientごと) #########
+## AF_mid_list.tsvはvarscan_maf_age_plot.Rにて作成
+mid_af_coverage =read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/AF_mid_coverage_by_patient.tsv.gz") %>>%
+  left_join(patient_list) %>>%
+  filter(!is.na(cancer_type),focal!="no") %>>%
+  dplyr::select(-focal) 
+
+
+
 ####################################################################################################################
 ########## somatic mutation ############
 #mutation抽出はgerm_pvalu_plot.Rにて
@@ -243,118 +243,26 @@ somatic_maf = somatic_maf %>>%
   filter(Transcript_ID !="ENST00000507379",Transcript_ID != "ENST00000300305", Transcript_ID != "ENST00000610664")
 # これで１つのgene に1つのtranscript_IDとなる。
 
-
-############################################################################################################
-### read coverage files ####
-coverage_all = read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/coverage_all.tsv")
-coverage_male_x = read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/coverage_X_male.tsv")
-
-#### AF > 5% のsiteのcoverage(patientごと) #########
-mid_af_coverage =read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/AF_mid_coverage_by_patient.tsv") %>>%
-  left_join(varscan_error %>>%filter(an_error > 100) %>>%dplyr::select(chr,start,an_error)) %>>%
-  filter(is.na(an_error)) %>>%
-  dplyr::select(-an_error) %>>%
-  left_join(error_region) %>>%
-  filter(!(start >= error_start & start <= error_end)|is.na(error_start)) %>>%
-  dplyr::select(-error_start,-error_end,-gene_symbol) %>>%
-  left_join(patient_list) %>>%
-  filter(!is.na(cancer_type),focal!="no") %>>%
-  dplyr::select(-focal)
-
-
-#######################################################################################################
-################################filtering duplicate? position #########################################
-#######################################################################################################
-### HWE test ###
-HWE_test=function(AF,homo,hetero,an){
-  .hw=c(AF^2,2*AF*(1-AF),1-(AF^2)-(2*AF*(1-AF)))
-  .test=chisq.test(c(homo,hetero,(an/2 - homo - hetero)),p=.hw)
-  .test$p.value
+###################################################################################################
+########## CNA data ##########
+#ascat data
+extract_ascat = function(.bp){
+  read_tsv(paste0("/Volumes/areca42TB/tcga/CNA/",.bp,"/cel/annotate_ascat.tsv.gz"),
+           col_types = "ccddcdddddddd")
 }
-do_HWE = function(.data){
-  HWE_test(.data$ac_cancer/.data$an_cancer,
-           .data$homo_cancer,.data$hetero_cancer,.data$an_cancer)
-}
-
-### altであるのがheteroのみでduplicateしているっぽい箇所(hetero >= 400 && alt_homo <=10のsite) ###
-error_site = tally_norm_maf%>>%
-  filter(chr != "chrX") %>>%
-  left_join(varscan_error) %>>% mutate(an_error = ifelse(is.na(an_error),0,an_error)) %>>%
-  left_join(coverage_all ) %>>%
-  filter(!is.na(an_cancer)) %>>%
-  mutate(an_cancer =an_cancer - an_error) %>>%
-  dplyr::select(-an_error) %>>%
-  mutate(hetero_cancer = ac_cancer - homo_cancer*2) %>>%
-  nest(-chr,-start,-ref,-alt) %>>%
-  mutate(HWE=purrr::map(data,~do_HWE(.))) %>>%
+bp_ascat = data.frame(bp = c("breast","brain","lung","kidney","colorectal")) %>>%
+  mutate(purrr::map(bp,~extract_ascat(.))) %>>%
   unnest() %>>%
-  mutate(ref_homo_cancer = (an_cancer/2 - homo_cancer - hetero_cancer)) %>>%
-  dplyr::select(gene_symbol,chr,start,end,ref,alt,HWE,ac_cancer,an_cancer,ref_homo_cancer,hetero_cancer,homo_cancer) %>>%
-  filter(HWE < 0.01) %>>%
-  filter(hetero_cancer >=400,homo_cancer <= 10)
-write_df(error_site,"/Volumes/areca42TB2/gdc/varscan/all_patient/duplicated_error_site.tsv")
+  left_join(all_patient_info %>>%dplyr::select(patient_id,cancer_type)) %>>%
+  dplyr::select(-bp)
+cantype_ascat = data.frame(cancer_type = c("hnsc","ov","prad","thca","ucec")) %>>%
+  mutate(purrr::map(cancer_type, ~extract_ascat(.))) %>>%
+  mutate(cancer_type = toupper(cancer_type)) %>>%
+  unnest()
 
-## ちょっとクライテリアをかえてみたら、、って見せるよう
-tally_norm_maf%>>%
-  filter(chr != "chrX") %>>%
-  left_join(varscan_error) %>>% mutate(an_error = ifelse(is.na(an_error),0,an_error)) %>>%
-  left_join(coverage_all ) %>>%
-  filter(!is.na(an_cancer)) %>>%
-  mutate(an_cancer =an_cancer - an_error) %>>%
-  dplyr::select(-an_error) %>>%
-  mutate(hetero_cancer = ac_cancer - homo_cancer*2) %>>%
-  nest(-chr,-start,-ref,-alt) %>>%
-  mutate(HWE=purrr::map(data,~do_HWE(.))) %>>%
-  unnest() %>>%
-  mutate(ref_homo_cancer = (an_cancer/2 - homo_cancer - hetero_cancer)) %>>%
-  dplyr::select(gene_symbol,chr,start,end,ref,alt,HWE,ac_cancer,an_cancer,ref_homo_cancer,hetero_cancer,homo_cancer) %>>%
-  filter(HWE < 0.01) %>>%
-  filter(hetero_cancer <400,hetero_cancer >=200,homo_cancer > 10,homo_cancer < 50) %>>%
-  write_df("/Volumes/areca42TB2/gdc/varscan/all_patient/not_duplicated_error_site.tsv")
-
-#error_siteの前後100bpを除く!!(KMT2Cは多すぎるので遺伝子ごと解析から外す)
-#もちろんsomatic mutationも!!
-error_region = error_site %>>%
-  mutate(error_start = start -101, error_end = end +100) %>>%
-  group_by(gene_symbol) %>>%
-  summarise(chr=first(chr),error_start=min(error_start),error_end=max(error_end)) %>>% ungroup() %>>%
-  dplyr::select(gene_symbol,chr,error_start,error_end)
-remove_duplicate = function(.maf){
-  .maf %>>%
-    filter(gene_symbol != "KMT2C") %>>%
-    left_join(error_region) %>>%
-    filter(!(start >= error_start & end <= error_end)|is.na(error_start)) %>>%
-    dplyr::select(-error_start,-error_end)
-}
-#duplicateしていそうなところと一緒にsomatic recurrent も取り除く
-norm_maf = norm_maf %>>%
-  left_join(somatic_recurrent%>>%dplyr::rename(n_allele2=alt))%>>%
-  filter(is.na(n)) %>>%dplyr::select(-n)%>>%
-  remove_duplicate
-tally_norm_maf = tally_norm_maf %>>%
-  left_join(somatic_recurrent)%>>%
-  filter(is.na(n))%>>%dplyr::select(-n)%>>%
-  remove_duplicate()
-somatic_maf = somatic_maf %>>%
-  remove_duplicate()
-
-#####################################################################################################################
-#### patient number ####
-norm_maf%>>%
-  dplyr::count(cancer_type,patient_id) %>>%
-  dplyr::select(-n) %>>%
-  left_join(annotate_ascat %>>%dplyr::count(patient_id) %>>%dplyr::select(-n)%>>% mutate(ascat_focal="ok")) %>>%
-  dplyr::count(cancer_type,ascat_focal) %>>%
-  #KICH=66 so delete
-  #filter(cancer_type != "KICH") %>>%
-  (?sum(.$n))
-
-### patient list ###
-patient_list = norm_maf %>>%
-  dplyr::count(cancer_type,patient_id,age) %>>%
-  dplyr::select(-n) %>>%
-  #filter(cancer_type != "KICH") %>>%
-  filter(!is.na(age))
+annotate_ascat=rbind(bp_ascat,cantype_ascat)%>>%
+  mutate(cancer_type = ifelse((cancer_type=="COAD" | cancer_type=="READ"),"CRC",cancer_type))
+rm(bp_ascat,cantype_ascat)
 
 
 #####################################################################################################

@@ -49,13 +49,13 @@ while(<INFO>){
 		$info{$line[$patidn]}{age        } = ($line[$agen   ] eq "" ? "NA" : $line[$agen   ]);
 }
 
-open(OUTS,">/Volumes/areca42TB2/gdc/varscan/all_patient/AF_mid_coverage_by_patient.tsv");
+open(OUTS,"|gzip -c >/Volumes/areca42TB2/gdc/varscan/all_patient/AF_mid_coverage_by_patient.tsv.gz");
 print OUTS "patient_id\tage\tgender\tchr\tstart\tfocal\n";
 my @project=qw(hnsc ov prad thca ucec);
 my @bodypart=qw(brain breast lung kidney colorectal);
-open(OUTC,">/Volumes/areca42TB2/gdc/varscan/all_patient/coverage_all.tsv");
+open(OUTC,"|gzip -c >/Volumes/areca42TB2/gdc/varscan/all_patient/coverage_all.tsv.gz");
 print OUTC "chr\tstart\tcancer_type\tan_white\tan_black\tan_other\n";
-open(OUTX,">/Volumes/areca42TB2/gdc/varscan/all_patient/coverage_X_male.tsv");
+open(OUTX,"|gzip -c >/Volumes/areca42TB2/gdc/varscan/all_patient/coverage_X_male.tsv.gz");
 print OUTX "chr\tstart\tcancer_type\tan_white\tan_black\tan_other\n";
 foreach my $project(@project){
 		print "doing $project\n";
@@ -81,9 +81,9 @@ sub main ( $ ){
 		my %coverage=();
 		my %coverage_xmale=();
 		#read norm depth file
-		my @dpls=`ls $dp_dir|grep out|grep -v tout`;chomp @dpls;
+		my @dpls_normal=`ls $dp_dir|grep out|grep -v tout`;chomp @dpls_normal;
 		my %dp_focal=(); #if defined dpfocal is coverage=ok at normal sequence
-		foreach my $dp_file(@dpls){
+		foreach my $dp_file(@dpls_normal){
 				print "read $pj:$dp_file\n";
 				$|=1; #バッファのフラッシュ
 				open(DP,"$dp_dir/$dp_file");
@@ -100,17 +100,13 @@ sub main ( $ ){
 				close DP;
 		}
 		#read tumor depth file
-		my @dplst=`ls $dp_dir|grep tout`;chomp @dplst;
-		foreach my $dp_file(@dplst){
+		my @dpls_tumor=`ls $dp_dir|grep tout`;chomp @dpls_tumor;
+		foreach my $dp_file(@dpls_tumor){
 				print "read $pj:$dp_file\n";
 				$|=1; #バッファのフラッシュ
-				my @male=();
 				open(DP,"$dp_dir/$dp_file");
 				my $dpcolum=<DP>;chomp$dpcolum;
 				my @dpcolum=split(/\t/,$dpcolum);
-				for(my $i=2;@dpcolum>$i;$i++){
-						if($info{$dpcolum[$i]}{gender} eq "male"){push(@male,$i);}
-				}
 				while(<DP>){
 						chomp;
 						my @line=split(/\t/,);
@@ -128,11 +124,11 @@ sub main ( $ ){
 								}
 						}else{
 								for(my $i=2;@line>$i;$i++){
-										if((grep{$_ eq $i}@male)&&($line[$i] >=8)&&(defined $dp_focal{$line[0]}{$line[1]}{$dpcolum[$i]})){
+										if(($info{$dpcolum[$i]}{gender} eq "male")&&($line[$i] >=8)&&(defined $dp_focal{$line[0]}{$line[1]}{$dpcolum[$i]})){
 												$dp_focal{$dpcolum[$i]}{$line[0]}{$line[1]}{tumor}="ok";
 												$coverage{$line[0]}{$line[1]}{$info{$dpcolum[$i]}{cancer_type}}{$info{$dpcolum[$i]}{race}}++;
 												$coverage_xmale{$line[1]}{$info{$dpcolum[$i]}{race}}++;
-										}elsif((!grep{$_ eq $i}@male)&&($line[$i] >=8)&&(defined $dp_focal{$line[0]}{$line[1]}{$dpcolum[$i]})){
+										}elsif(($info{$dpcolum[$i]}{gender} ne "male")&&($line[$i] >=8)&&(defined $dp_focal{$line[0]}{$line[1]}{$dpcolum[$i]})){
 												$dp_focal{$dpcolum[$i]}{$line[0]}{$line[1]}{tumor}="ok";
 												$coverage{$line[0]}{$line[1]}{$info{$dpcolum[$i]}{cancer_type}}{$info{$dpcolum[$i]}{race}}+=2;
 										}
@@ -147,24 +143,24 @@ sub main ( $ ){
 						}
 				}
 				close DP;
-				my @chr=qw(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X);
-				foreach my $chr(@chr){
+		}
+		my @chr=qw(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X);
+		foreach my $chr(@chr){
+				foreach my $posi(sort{$a<=>$b}keys %{$coverage{$chr}}){
+						foreach my $cancer_type (keys%{$coverage{$chr}{$posi}}){
+								if(!defined($coverage{$chr}{$posi}{$cancer_type}{white})){$coverage{$chr}{$posi}{$cancer_type}{white}=0;}
+								if(!defined($coverage{$chr}{$posi}{$cancer_type}{black})){$coverage{$chr}{$posi}{$cancer_type}{black}=0;}
+								if(!defined($coverage{$chr}{$posi}{$cancer_type}{other})){$coverage{$chr}{$posi}{$cancer_type}{other}=0;}
+								print OUTC "chr$chr\t$posi\t$cancer_type\t$coverage{$chr}{$posi}{$cancer_type}{white}\t$coverage{$chr}{$posi}{$cancer_type}{black}\t$coverage{$chr}{$posi}{$cancer_type}{other}\n";
+						}
+				}
+				if($chr eq "X"){
 						foreach my $posi(sort{$a<=>$b}keys %{$coverage{$chr}}){
 								foreach my $cancer_type (keys%{$coverage{$chr}{$posi}}){
 										if(!defined($coverage{$chr}{$posi}{$cancer_type}{white})){$coverage{$chr}{$posi}{$cancer_type}{white}=0;}
 										if(!defined($coverage{$chr}{$posi}{$cancer_type}{black})){$coverage{$chr}{$posi}{$cancer_type}{black}=0;}
 										if(!defined($coverage{$chr}{$posi}{$cancer_type}{other})){$coverage{$chr}{$posi}{$cancer_type}{other}=0;}
-										print OUTC "chr$chr\t$posi\t$cancer_type\t$coverage{$chr}{$posi}{$cancer_type}{white}\t$coverage{$chr}{$posi}{$cancer_type}{black}\t$coverage{$chr}{$posi}{$cancer_type}{other}\n";
-								}
-						}
-						if($chr eq "X"){
-								foreach my $posi(sort{$a<=>$b}keys %{$coverage{$chr}}){
-										foreach my $cancer_type (keys%{$coverage{$chr}{$posi}}){
-												if(!defined($coverage{$chr}{$posi}{$cancer_type}{white})){$coverage{$chr}{$posi}{$cancer_type}{white}=0;}
-												if(!defined($coverage{$chr}{$posi}{$cancer_type}{black})){$coverage{$chr}{$posi}{$cancer_type}{black}=0;}
-												if(!defined($coverage{$chr}{$posi}{$cancer_type}{other})){$coverage{$chr}{$posi}{$cancer_type}{other}=0;}
-												print OUTX "chr$chr\t$posi\t$cancer_type\t$coverage{$chr}{$posi}{$cancer_type}{white}\t$coverage{$chr}{$posi}{$cancer_type}{black}\t$coverage{$chr}{$posi}{$cancer_type}{other}\n";
-										}
+										print OUTX "chr$chr\t$posi\t$cancer_type\t$coverage{$chr}{$posi}{$cancer_type}{white}\t$coverage{$chr}{$posi}{$cancer_type}{black}\t$coverage{$chr}{$posi}{$cancer_type}{other}\n";
 								}
 						}
 				}
