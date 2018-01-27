@@ -47,11 +47,10 @@ maf_trim_for_cumulative_cont = function(.maf=norm_maf_all_cont,.vcf=vcf_exac_con
         mutate(AF=AC_Adj/AN_Adj)%>>%
         dplyr::select(chr,start,ref,alt,AF)
     }}else {stop(paste0(".race is wrong .race=",.race,"\nuse all, white or black!"))}
-  if(0){
-  ref_minor = mid_af_coverage %>>%
+  ref_minor = ref_minor_focal_cont %>>%
     left_join(patient_race) %>>%
     filter(if(.race !="all"){race==.race}else{chr==chr}) %>>%
-    left_join(left_join(tally_norm_maf,.vcf)%>>%
+    left_join(left_join(tally_norm_maf_cont,.vcf)%>>%
                 dplyr::select(-ac_cancer,-hom_cancer)) %>>%
     filter(AF > 0.5) %>>% mutate(MAF=1-AF) %>>%
     left_join(.maf) %>>%
@@ -61,34 +60,33 @@ maf_trim_for_cumulative_cont = function(.maf=norm_maf_all_cont,.vcf=vcf_exac_con
            LOH = ifelse(is.na(LOH),"ref",LOH))%>>%
     dplyr::select(patient_id,cancer_type,gene_symbol,chr,start,end,ref,alt,
                   mutype,AF,MAF,n_allele1,n_allele2,soma_or_germ,LOH,age,Protein_position) %>>%
-    quality_filter(.data_type = "maf",.fdr = .fdr,.database = .database,
+    quality_filter_cont(.data_type = "maf",.fdr = .fdr,.database = .database,
                    .duplicate = .duplicate,.somatic = .somatic,.varscan = .varscan) %>>%
     mutate(MAC=ifelse(n_allele1 == alt,0,ifelse(n_allele2==ref,2,1))) %>>%
-    filter(MAC > 0) %>>%
-    dplyr::select(patient_id,cancer_type,gene_symbol,chr,start,end,ref,alt,mutype,AF,MAF,MAC,age,Protein_position)
-  }
+    filter(MAC > 0)
   .maf %>>%
     quality_filter_cont(.data_type = "maf",.fdr = .fdr,.database = .database,
                    .duplicate = .duplicate,.somatic = .somatic,.varscan = .varscan) %>>%
     left_join(.vcf) %>>%
     mutate(AF=ifelse(is.na(AF),0,AF)) %>>%
-    filter(AF < 0.5) %>>% mutate(MAF = AF) %>>%
+    filter(AF <= 0.5) %>>% mutate(MAF = AF) %>>%
     mutate(MAC = ifelse(n_allele1==alt,2,ifelse(n_allele2==alt,1,0))) %>>%
     dplyr::select(patient_id,cancer_type,gene_symbol,chr,start,end,ref,alt,mutype,AF,MAF,MAC,age,Protein_position) %>>%
-    #rbind(ref_minor) %>>%
+    rbind(ref_minor) %>>%
     filter(!is.na(age),chr != "chrX")
 }
 
-all_maf_for_cumulative_cont = maf_trim_for_cumulative_cont(.varscan=F) ##################
+all_maf_for_cumulative_cont = maf_trim_for_cumulative_cont()
 
 #################################################################################################################
 #0.01%ごとにregressionしてみる
-make_regression_tabel = function(.vcf=vcf_exac_cont,.race="all",.fdr=0.01,.mutype="missense",
+make_regression_tabel = function(.maf=norm_maf_all_cont,.vcf=vcf_exac_cont,.race="all",
+                                 .fdr=0.01,.mutype="missense",.max_maf=10,
                                  .database="all",.duplicate=T,.somatic=T,.varscan=T){
-  regression_out = function(.class,.maf,.patient_list){
+  regression_out = function(.minor_allele_frequency,.maf,.patient_list){
     ##missense の数
     missense_count = .maf %>>%
-      filter(MAF <= .class)%>>%
+      filter(MAF <= .minor_allele_frequency)%>>%
       group_by(cancer_type,patient_id) %>>%
       summarise(missense_num=sum(MAC)) %>>%
       {left_join(.patient_list,.,by = c("cancer_type","patient_id"))} %>>%
@@ -110,11 +108,13 @@ make_regression_tabel = function(.vcf=vcf_exac_cont,.race="all",.fdr=0.01,.mutyp
       left_join(patient_race) %>>%
       filter(race==.race)
   }
-  .maf=maf_trim_for_cumulative_cont(.vcf=.vcf,.race=.race,.fdr=.fdr,.database=.database,
-                               .duplicate=.duplicate,.somatic=.somatic,.varscan=.varscan)
+  if(substitute(.maf) =="norm_maf_all_cont"){
+    .maf=maf_trim_for_cumulative_cont(.maf=.maf,.vcf=.vcf,.race=.race,.fdr=.fdr,.database=.database,
+                                      .duplicate=.duplicate,.somatic=.somatic,.varscan=.varscan)
+  }
   .maf = .maf %>>%filter(mutype==.mutype)#%>>%filter(MAF!=0)
-  data.frame(MAF=1:1000) %>>%
-    mutate(MAF = MAF/10000) %>>%#head(5)%>>%
+  tibble::tibble(MAF=1:(.max_maf*100)) %>>%
+    mutate(MAF = MAF/10000) %>>%
     mutate(regression = purrr::map(MAF,~regression_out(.,.maf,.patient_list)))%>>%
     unnest()
 }
@@ -138,27 +138,48 @@ regression_tbl_plot = function(.reg_tbl,.maf_max = 1,
   return(.plot)
 }
 
-regression_table = make_regression_tabel(.varscan = F) #############################################
-.plot=regression_table　%>>%
+regression_table_cont = make_regression_tabel() 
+.plot=regression_table_cont　%>>%
   regression_tbl_plot()
 ggsave("age_plot/control_region/regression_plot-1_missense_control.pdf",.plot,height = 8,width = 20)
-.plot=regression_table　%>>%
+.plot=regression_table_cont　%>>%
   regression_tbl_plot(.maf_max = 10,.expand = 0.15)
 ggsave("age_plot/control_region/regression_plot-10_missense_control.pdf",.plot,height = 8,width = 20)
 
-regression_table_silent = make_regression_tabel(.mutype = "silent",.varscan = F) ##################
-.plot= regression_table_silent %>>%
+regression_table_silent_cont = make_regression_tabel(.mutype = "silent")
+.plot= regression_table_silent_cont %>>%
   regression_tbl_plot(.maf_max = 1, .bl_ln = NULL, .red_ln = NULL)
 ggsave("age_plot/control_region/regression_plot-1_silent_control.pdf",.plot,height = 8,width = 20)
-.plot= regression_table_silent %>>%
+.plot= regression_table_silent_cont %>>%
   regression_tbl_plot(.maf_max = 10,.bl_ln = NULL,.red_ln = NULL,.expand = 0.15)
 ggsave("age_plot/control_region/regression_plot-10_silent_control.pdf",.plot,height = 8,width = 20)
 
+################################################
+library(doParallel)
+randome_sample_regression_missense = function(.repeat_num,.maf = all_maf_for_cumulative_cont,
+                                              .mutype = "missense"){
+  .tbl = .maf %>>% left_join(
+      tibble(gene_symbol = sample(control_genes$gene_symbol,67)) %>>%
+        mutate(focal = "ok")
+    )%>>%
+    filter(! is.na(focal),mutype == .mutype) %>>%
+    make_regression_tabel(.max_maf = 1,.mutype = .mutype)
+  if(.repeat_num %% 10 == 0){print(paste0("done ", .repeat_num, "times"))}
+  return(.tbl)
+}
+repeat_regression_table_cont =
+  tibble(repeat_num = 1:100) %>>%
+  mutate(tbl = purrr::map(repeat_num, ~randome_sample_regression_missense(.))) %>>%
+  unnest()
+repeat_regression_table_cont_silent =
+  tibble(repeat_num = 1:100) %>>%
+  mutate(tbl = purrr::map(repeat_num, ~randome_sample_regression_missense(.mutype = "silent"))) %>>%
+  unnest()
 ####################################################################################################
 #violin plot 作ってみる
 cumulative_plot = function(.maf=all_maf_for_cumulative_cont,.MAF_start = 0,.mutype="missense",
-                           .MAF_end, .facet_by_cancer_type = F,
-                           .by_gene = F, .more_1par = F,.race="all"){
+                           .MAF_end, .facet_by_cancer_type = F, .by_gene = F, .more_1par = F,
+                           .race="all", .file_tail = ""){
   .patient_list=patient_list
   if(.race!="all"){
     .patient_list = .patient_list %>>%
@@ -270,10 +291,57 @@ cumulative_plot = function(.maf=all_maf_for_cumulative_cont,.MAF_start = 0,.muty
     .plot = .plot+xlab(paste0("number of ",.mutype," mutation"))
   }
   .plot
-  ggsave(paste0("age_plot/control_region/violin_plot/plot_",.mutype,.MAF_start,"~",.MAF_end,".pdf"),
+  ggsave(paste0("age_plot/control_region/violin_plot/plot_",.mutype,.MAF_start,"~",.MAF_end,.file_tail,".pdf"),
          .plot,height = 16,width = 15)
 }
 cumulative_plot(.MAF_end = 0.05, .more_1par = T,.mutype = "silent")
 cumulative_plot(.MAF_end = 0.05, .more_1par = T)
 cumulative_plot(.MAF_end = 0.5, .more_1par = T,.mutype = "silent")
 cumulative_plot(.MAF_end = 0.5, .more_1par = T)
+
+
+
+################################################################################################################
+################################################################################################################
+################################################################################################################
+################################################################################################################
+#可能性1:control geneにoncogeneが含まれていた。
+#可能性2:essential geneに傷が入った状態でガンになる際passenger mutationがこれらの遺伝子で起こると
+#        ガンですら生存が危うくなるため発症が遅くなる。
+#可能性2を確かめるためhuman - mouse でKaKsが低い遺伝子のみで発症年齢をみてみよう！
+enstXucsc = read_tsv("/Volumes/areca42TB/primates/ensembl2ucsc_Xref.tsv.gz",comment = "#")
+primate_kaks = read_tsv("/Volumes/areca42TB/primates/ucid_primatesKAKS.tsv.gz")
+control_genes_kaks = left_join(control_genes %>>%dplyr::select(gene_symbol,Transcript_ID),
+                           enstXucsc,by = c("gene_symbol" = "HGNC_symbol")) %>>%
+  filter(!is.na(UCSC_ID)) %>>%
+  separate(UCSC_ID,into = c("ucsc_id","ucsc_id_num"),sep = "\\.") %>>%
+  left_join(primate_kaks%>>%
+              separate(ucid, into = c("ucsc_id","ucid_num"), sep = "\\.") %>>%
+              dplyr::select(ucsc_id,ucid_num,Mouse)) %>>%
+  filter(!is.na(Mouse)) %>>%
+  separate(Mouse,into = c("kaks","cds_length"),sep = ":") %>>%
+  mutate(kaks = parse_double(kaks), cds_length = parse_double(cds_length)) %>>%
+  group_by(gene_symbol) %>>%
+  summarise(cds_length = max(cds_length),kaks =kaks[which.max(cds_length)]) %>>%ungroup()
+
+low_kaks_regression_table = all_maf_for_cumulative_cont %>>% 
+  left_join(control_genes_kaks %>>%dplyr::select(gene_symbol,kaks,cds_length)) %>>%
+  filter(!is.na(kaks),kaks <0.05,cds_length >100) %>>%
+  make_regression_tabel()
+.plot = low_kaks_regression_table %>>%
+  regression_tbl_plot(.maf_max = 1,.bl_ln = NULL,.red_ln = NULL)
+ggsave("age_plot/control_region/low_kaks/regression_plot-1_control.pdf",.plot,height = 8,width = 20)
+.plot = low_kaks_regression_table %>>%
+  regression_tbl_plot(.maf_max = 10,.expand = 0.15)
+ggsave("age_plot/control_region/low_kaks/regression_plot-10_control.pdf",.plot,height = 8,width = 20)
+
+low_kaks_regression_table_silent = all_maf_for_cumulative_cont %>>% 
+  left_join(control_genes_kaks %>>%dplyr::select(gene_symbol,kaks,cds_length)) %>>%
+  filter(!is.na(kaks),kaks <0.05,cds_length >100 ) %>>%
+  make_regression_tabel(.mutype = "silent")
+.plot = low_kaks_regression_table_silent %>>%
+  regression_tbl_plot(.maf_max = 1,.bl_ln = NULL,.red_ln = NULL)
+ggsave("age_plot/control_region/low_kaks/regression_plot-1_silent_control.pdf",.plot,height = 8,width = 20)
+.plot = low_kaks_regression_table_silent %>>%
+  regression_tbl_plot(.maf_max = 10,.bl_ln = NULL,.red_ln = NULL,.expand = 0.15)
+ggsave("age_plot/control_region/low_kaks/regression_plot-10_silent_control.pdf",.plot,height = 8,width = 20)

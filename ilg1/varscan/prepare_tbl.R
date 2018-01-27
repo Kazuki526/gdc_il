@@ -174,8 +174,20 @@ rm(body_part_maf,cancer_type_maf)
 
 ####################################
 ### read coverage files ####
-coverage_all = read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/coverage_all.tsv.gz")
-coverage_male_x = read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/coverage_X_male.tsv.gz")
+coverage_all_by_cancer_type =
+  read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/coverage_all.tsv.gz")
+coverage_all = coverage_all_by_cancer_type %>>%
+  mutate(an_cancer = an_white + an_black + an_other) %>>%
+  group_by(chr,start) %>>%
+  summarise(an_cancer = sum(an_cancer))
+
+coverage_male_x_by_cancer_type =
+  read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/coverage_X_male.tsv.gz") %>>%
+  rename(an_white_male = an_white, an_black_male = an_black, an_other_male = an_other)
+coverage_male_x = coverage_male_x_by_cancer_type %>>%
+  mutate(an_male_cancer = an_white_male + an_black_male + an_other_male) %>>%
+  group_by(chr,start) %>>%
+  summarise(an_male_cancer = sum(an_male_cancer))
 
 tally_norm_maf = norm_maf_all%>>%
   #filter(cancer_type != "KICH") %>>%

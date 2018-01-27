@@ -207,33 +207,35 @@ cumulative_plot = function(.maf=all_maf_for_cumulative,.MAF_start = 0,.mutype="m
     .plot=.plot+scale_x_discrete(labels = legendx3)+
       xlab("number of gene")
   }else{
-    .plot = .plot+xlab("number of nonsynonymous mutation")
+    .plot = .plot+xlab(paste0("number of ", .mutype, " mutation"))
   }
   .plot
   ggsave(paste0("age_plot/cumulative/",.path,"/plot",.MAF_start,"~",.MAF_end,".pdf"),.plot,height = 16,width = 15)
 }
 #################################################################################################################
 #0.01%ごとにregressionしてみる
-regression_out = function(.class,.role="TSG",.maf,.patient_list,.truncate){
-  ##missense の数
-  missense_count = .maf %>>%
-    filter(MAF <= .class)%>>%
-    left_join(driver_genes %>>%dplyr::select(gene,role)%>>%dplyr::rename(gene_symbol=gene), by = "gene_symbol") %>>%
-    filter(role==.role) %>>%
-    group_by(cancer_type,patient_id) %>>%
-    summarise(missense_num=sum(MAC)) %>>%
-    {left_join(.patient_list,.,by = c("cancer_type","patient_id"))} %>>%
-    mutate(missense_num = ifelse(is.na(missense_num),0,missense_num)) %>>%
-    left_join(.truncate,by = c("cancer_type","patient_id","age")) %>>%
-    filter(truncating_count_n==0)
-  #相関直線を
-  lm=lm(age/365.25 ~ missense_num, data=missense_count)
-  as.data.frame(as.list(coef(lm))) %>>%
-    mutate(p_value = 1 - pf(summary(lm)$fstatistic["value"],summary(lm)$fstatistic["numdf"],
-                            summary(lm)$fstatistic["dendf"]))
-}
-make_regression_tabel = function(.vcf=vcf_exac,.race="all",.fdr=0.01,.role="TSG",.mutype="missense",
+make_regression_tabel = function(.maf=all_maf_for_cumulative,.vcf=vcf_exac,.race="all",.role = "TSG",
+                                 .fdr=0.01,.mutype="missense",.max_maf=10,.maf_filter=F,
                                  .database="all",.duplicate=T,.somatic=T,.varscan=T){
+  regression_out = function(.class,.maf,.role,.patient_list,.truncate){
+    ##missense の数
+    missense_count = .maf %>>%
+      filter(MAF <= .class)%>>%
+      left_join(driver_genes %>>%dplyr::select(gene,role)%>>%
+                  dplyr::rename(gene_symbol=gene), by = "gene_symbol") %>>%
+      filter(role==.role) %>>%
+      group_by(cancer_type,patient_id) %>>%
+      summarise(missense_num=sum(MAC)) %>>%
+      {left_join(.patient_list,.,by = c("cancer_type","patient_id"))} %>>%
+      mutate(missense_num = ifelse(is.na(missense_num),0,missense_num)) %>>%
+      left_join(.truncate,by = c("cancer_type","patient_id","age")) %>>%
+      filter(truncating_count_n==0)
+    #相関直線を
+    lm=lm(age/365.25 ~ missense_num, data=missense_count)
+    as.data.frame(as.list(coef(lm))) %>>%
+      mutate(p_value = 1 - pf(summary(lm)$fstatistic["value"],summary(lm)$fstatistic["numdf"],
+                              summary(lm)$fstatistic["dendf"]))
+  }
   if((.race=="all")&(substitute(.vcf)=="vcf_exac")){
     .vcf = .vcf %>>%
       mutate(AF=AC_Adj/AN_Adj)%>>%
@@ -245,8 +247,9 @@ make_regression_tabel = function(.vcf=vcf_exac,.race="all",.fdr=0.01,.role="TSG"
       left_join(patient_race) %>>%
       filter(race==.race)
   }
-  .maf=maf_trim_for_cumulative(.vcf=.vcf,.race=.race,.fdr=.fdr,.database=.database,
+  if(.maf_filter){.maf=maf_trim_for_cumulative(.vcf=.vcf,.race=.race,.fdr=.fdr,.database=.database,
                                .duplicate=.duplicate,.somatic=.somatic,.varscan=.varscan)
+  }
   .truncate=.maf %>>%
     left_join(driver_genes %>>%dplyr::select(gene,role),by=c("gene_symbol"="gene")) %>>%
     filter((mutype=="truncating"|mutype=="splice"),role==.role) %>>%
@@ -254,13 +257,12 @@ make_regression_tabel = function(.vcf=vcf_exac,.race="all",.fdr=0.01,.role="TSG"
     group_by(cancer_type,patient_id) %>>%summarise(truncating_count_n=n())%>>%
     {left_join(.patient_list,.)}%>>%
     mutate(truncating_count_n=ifelse(is.na(truncating_count_n),0,truncating_count_n))
-  .maf = .maf %>>%filter(mutype==.mutype)#%>>%filter(MAF!=0)
-  data.frame(MAF=1:1000) %>>%
-    mutate(MAF = MAF/10000) %>>%#head(5)%>>%
-    mutate(regression = purrr::map(MAF,~regression_out(.,.role,.maf,.patient_list,.truncate)))%>>%
+  .maf = .maf %>>%filter(mutype==.mutype)
+  tibble::tibble(MAF=1:(.max_maf*100)) %>>%
+    mutate(MAF = MAF/10000) %>>%
+    mutate(regression = purrr::map(MAF,~regression_out(.,.maf,.role,.patient_list,.truncate)))%>>%
     unnest()
 }
-
 ####################################################################################################################
 #####################################################  TSG  ########################################################
 ####################################################################################################################
@@ -349,7 +351,9 @@ ggsave("age_plot/cumulative/silent/regression_plot-1.pdf",.plot,height = 8,width
   regression_tbl_plot(.maf_max = 10,.bl_ln = NULL,.red_ln = NULL,.expand = 0.15)
 ggsave("age_plot/cumulative/silent/regression_plot-10.pdf",.plot,height = 8,width = 20)
 
-reg_tbl=make_regression_tabel(.race = "white")
+
+#人種白人だけでやってみると？
+reg_tbl=make_regression_tabel(.race = "white",.maf_filter = T)
 reg_tbl %>>%
   regression_tbl_plot(.maf_max = 10,.bl_ln = NULL,.red_ln = NULL,.expand = 0.15)
 reg_tbl_silent=make_regression_tabel(.mutype = "silent",.race = "white")

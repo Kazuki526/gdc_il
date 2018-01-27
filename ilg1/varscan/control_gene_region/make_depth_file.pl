@@ -6,7 +6,7 @@ use strict;
 ######################## perl make_depth_file.pl ###########################
 my $bed_file = "/Volumes/areca42TB/GRCh38_singlefasta/control_genes_exon_with_splice_site.bed";
 -e $bed_file or die "ERROR::not exist $bed_file!!\n";
-my @projects = qw(brca crc hnsc kcc lgg luad lusc ov prad thca ucec);
+my @projects = qw(brca crc gbm hnsc kcc lgg luad lusc ov prad thca ucec);
 foreach my $project (@projects){
 		&make_depth_file($project);
 }

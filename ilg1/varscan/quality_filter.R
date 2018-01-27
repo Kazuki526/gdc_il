@@ -45,8 +45,7 @@ tally_1kg_all= maf_1kg_all %>>%
   left_join(maf_1kg_all %>>% group_by(sample,chr,start,alt) %>>%mutate(variant_num=n()) %>>%
               filter(variant_num==2) %>>%group_by(chr,start,end,alt) %>>%summarise(hom_1kg=n()/2)) %>>%
   mutate(an_1kg = ifelse(chr=="X",sample_num_X_1kg,sample_num_1kg))%>>%
-  mutate(chr=paste0("chr",chr),hom_1kg=ifelse(is.na(hom_1kg),0,hom_1kg)) #%>>%
-#full_join(vcf_1kg_ac0)
+  mutate(chr=paste0("chr",chr),hom_1kg=ifelse(is.na(hom_1kg),0,hom_1kg)) #%>>%full_join(vcf_1kg_ac0)
 
 rm(sample_num_1kg,sample_num_X_1kg,maf_1kg_all)
 ####UK 10K ###
@@ -82,6 +81,7 @@ rm(vcf_exac_indel,exac_nonindel,exac_indel)
 ################################filtering duplicate? position #########################################
 #######################################################################################################
 ### HWE test ###
+if(0){
 HWE_test_heterom = function(ac,an,hom){
   AF=ac/an
   .matrix = matrix(c(round(an*AF*(1-AF)),round(an/2*AF^2),ac-hom*2,hom), nrow = 2)
@@ -98,8 +98,7 @@ duplicate_site = exac %>>%
   unnest() %>>%
   mutate(FDR_exac=p.adjust(HWE_exac)) %>>%filter(FDR_exac<0.01)%>>%
   full_join(tally_norm_maf%>>%
-              dplyr::select(chr,start,ref,alt,ac_cancer,hom_cancer,gene_symbol,mutype) %>>%
-              left_join(coverage_all ) %>>%
+              dplyr::select(chr,start,ref,alt,ac_cancer,hom_cancer,gene_symbol,mutype,an_cancer) %>>%
               mutate(hom_cancer_hwe = ac_cancer^2/an_cancer/2) %>>%
               filter(chr!="chrX") %>>%
               nest(-chr,-start,-ref,-alt) %>>%
@@ -121,6 +120,9 @@ duplicate_site = exac %>>%
               unnest() %>>%
               mutate(FDR_uk=p.adjust(HWE_uk)) %>>%filter(FDR_uk<0.01))%>>%
   filter(ref!="-" & alt!="-")
+write_df(duplicate_site,"/Volumes/areca42TB2/gdc/varscan/all_patient/duplicate_site.tsv")
+}
+duplicate_site = read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/duplicate_site.tsv")
 
 ##### somaticでrecurrentなmutationはgermで起こっているとは考えにくい（様々なエラーが考えられる）
 #いちおうEXACでAF>1%となっているsiteはこれに含めない
@@ -202,4 +204,4 @@ quality_filter= function(.data,.data_type="vcf",.fdr=0.01,.database="all",.dupli
     filter(if(.somatic==T){is.na(recurrent_focal)}else{chr==chr})%>>%
     dplyr::select(-recurrent_focal,-duplicate_focal)
 }
-                                                          
+s                                                          

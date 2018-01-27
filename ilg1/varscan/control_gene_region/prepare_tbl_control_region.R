@@ -154,8 +154,20 @@ norm_maf_all_cont = read_tsv("/Volumes/areca42TB/tcga/all_patient/control_region
   mutate(LOH=ifelse((soma_or_germ == "somatic" & LOH =="no" & ref != n_allele2),"back_mutation",LOH))
 
 ######  coverage file
-coverage_all = read_tsv("/Volumes/areca42TB2/gdc/control_region/all_patient/coverage_all_cont.tsv.gz")
-coverage_male_x = read_tsv("/Volumes/areca42TB2/gdc/control_region/all_patient/coverage_X_male_cont.tsv.gz")
+coverage_all_by_cancer_type_cont =
+  read_tsv("/Volumes/areca42TB2/gdc/control_region/all_patient/coverage_all_cont.tsv.gz")
+coverage_all_cont = coverage_all_by_cancer_type_cont %>>%
+  mutate(an_cancer = an_white + an_black + an_other) %>>%
+  group_by(chr,start) %>>%
+  summarise(an_cancer = sum(an_cancer))
+  
+coverage_male_x_by_cancer_type_cont =
+  read_tsv("/Volumes/areca42TB2/gdc/control_region/all_patient/coverage_X_male_cont.tsv.gz") %>>%
+  rename(an_white_male = an_white, an_black_male = an_black, an_other_male = an_other)
+coverage_male_x_cont = coverage_male_x_by_cancer_type_cont %>>%
+  mutate(an_male_cancer = an_white_male + an_black_male + an_other_male) %>>%
+  group_by(chr,start) %>>%
+  summarise(an_male_cancer = sum(an_male_cancer))
 
 tally_norm_maf_cont = norm_maf_all_cont %>>%
   filter(!(soma_or_germ=="somatic" & LOH=="no")) %>>%
@@ -167,10 +179,10 @@ tally_norm_maf_cont = norm_maf_all_cont %>>%
   summarise(ac_cancer=n(),hom_cancer=sum(homo)/2,gene_symbol=first(gene_symbol),
             Consequence=first(Consequence),PolyPhen=first(PolyPhen),mutype=first(mutype),
             cDNA_position=first(cDNA_position),CDS_position=first(CDS_position)) %>>%
-  ungroup() #%>>%
-#  left_join(coverage_all_cont) %>>%left_join(coverage_male_x) %>>%
-#  mutate(an_male_cancer = ifelse(is.na(an_male_cancer),0,an_male_cancer)) %>>%
-#  mutate(an_cancer = an_cancer - an_male_cancer) %>>%dplyr::select(-an_male_cancer)
+  ungroup() %>>%
+  left_join(coverage_all_cont) %>>%left_join(coverage_male_x_cont) %>>%
+  mutate(an_male_cancer = ifelse(is.na(an_male_cancer),0,an_male_cancer)) %>>%
+  mutate(an_cancer = an_cancer - an_male_cancer) %>>%dplyr::select(-an_male_cancer)
 #############################################################################################################
 ###############################################  ExAC nonTCGA  ##############################################
 strip_maf = function(infile) {
@@ -217,30 +229,35 @@ ref_minor_focal_cont = read_tsv("/Volumes/areca42TB2/gdc/control_region/all_pati
 ################################################################################################################
 ################################################################################################################
 ### HWE test ###
-HWE_test_heterom = function(ac,an,hom){
-  AF=ac/an
-  .matrix = matrix(c(round(an*AF*(1-AF)),round(an/2*AF^2),ac-hom*2,hom), nrow = 2)
-  fisher.test(.matrix,alternative = "less")$p.value
+if(0){
+  HWE_test_heterom = function(ac,an,hom){
+    AF=ac/an
+    .matrix = matrix(c(round(an*AF*(1-AF)),round(an/2*AF^2),ac-hom*2,hom), nrow = 2)
+    fisher.test(.matrix,alternative = "less")$p.value
+  }
+  duplicate_site_cont =exac_cont %>>%
+    filter(ref!="-" & alt!="-")%>>%
+    dplyr::select(gene_symbol,chr,start,ref,alt,mutype,AC_Adj,AN_Adj,AC_Hom) %>>%
+    dplyr::rename(ac_exac=AC_Adj,an_exac=AN_Adj,hom_exac=AC_Hom) %>>%
+    mutate(hom_exac_hwe=(ac_exac^2/an_exac)/2) %>>%
+    filter(chr!="chrX",ac_exac!=0,!is.na(hom_exac)) %>>%
+    nest(-chr,-start,-ref,-alt) %>>%
+    mutate(HWE_exac = purrr::map(data,~HWE_test_heterom(.$ac_exac,.$an_exac,.$hom_exac))) %>>%
+    unnest() %>>%
+    mutate(FDR_exac=p.adjust(HWE_exac)) %>>%filter(FDR_exac<0.01) %>>%
+    full_join(tally_norm_maf_cont%>>%
+                filter(ref!="-" & alt!="-")%>>%
+                dplyr::select(chr,start,ref,alt,ac_cancer,hom_cancer,gene_symbol,mutype,an_cancer) %>>%
+                mutate(hom_cancer_hwe = ac_cancer^2/an_cancer/2) %>>%
+                filter(chr!="chrX") %>>%
+                nest(-chr,-start,-ref,-alt) %>>%
+                mutate(HWE_cancer=purrr::map(data,~HWE_test_heterom(.$ac_cancer,.$an_cancer,.$hom_cancer))) %>>%
+                unnest() %>>%
+                mutate(FDR_cancer=p.adjust(HWE_cancer)) %>>%filter(FDR_cancer<0.01))
+  write_df(duplicate_site_cont,"/Volumes/areca42TB2/gdc/control_region/all_patient/duplicate_site_control.tsv")
 }
-duplicate_site_cont =exac_cont %>>%
-  dplyr::select(gene_symbol,chr,start,ref,alt,mutype,AC_Adj,AN_Adj,AC_Hom) %>>%
-  dplyr::rename(ac_exac=AC_Adj,an_exac=AN_Adj,hom_exac=AC_Hom) %>>%
-  mutate(hom_exac_hwe=(ac_exac^2/an_exac)/2) %>>%
-  filter(chr!="chrX",ac_exac!=0,!is.na(hom_exac)) %>>%
-  nest(-chr,-start,-ref,-alt) %>>%
-  mutate(HWE_exac = purrr::map(data,~HWE_test_heterom(.$ac_exac,.$an_exac,.$hom_exac))) %>>%
-  unnest() %>>%
-  mutate(FDR_exac=p.adjust(HWE_exac)) %>>%filter(FDR_exac<0.01) %>>%
-#  full_join(tally_norm_maf%>>%
-#              dplyr::select(chr,start,ref,alt,ac_cancer,hom_cancer,gene_symbol,mutype) %>>%
-#              left_join(coverage_all ) %>>%
-#              mutate(hom_cancer_hwe = ac_cancer^2/an_cancer/2) %>>%
-#              filter(chr!="chrX") %>>%
-#              nest(-chr,-start,-ref,-alt) %>>%
-#              mutate(HWE_cancer=purrr::map(data,~HWE_test_heterom(.$ac_cancer,.$an_cancer,.$hom_cancer))) %>>%
-#              unnest() %>>%
-#              mutate(FDR_cancer=p.adjust(HWE_cancer)) %>>%filter(FDR_cancer<0.01)) %>>%
-  filter(ref!="-" & alt!="-")
+duplicate_site_cont = read_tsv("/Volumes/areca42TB2/gdc/control_region/all_patient/duplicate_site_control.tsv") 
+
 ##### somaticでrecurrentなmutationはgermで起こっているとは考えにくい（様々なエラーが考えられる）
 #いちおうEXACでAF>1%となっているsiteはこれに含めない
 somatic_recurrent_cont = norm_maf_all_cont%>>%
@@ -317,5 +334,6 @@ quality_filter_cont =
     filter(if(.somatic==T){is.na(recurrent_focal)}else{chr==chr})%>>%
     dplyr::select(-recurrent_focal,-duplicate_focal)
 }
+#quality_filter_cont(norm_maf_all_cont,.data_type = "maf",.varscan = T)
 
 

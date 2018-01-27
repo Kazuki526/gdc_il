@@ -51,10 +51,10 @@ while(<INFO>){
 
 open(OUTS,"|gzip -c >/Volumes/areca42TB2/gdc/control_region/all_patient/ref_minor_coverage_by_patient.tsv.gz");
 print OUTS "patient_id\tage\tgender\tchr\tstart\tfocal\n";
-my @projects = qw(brca crc hnsc kcc lgg luad lusc ov prad thca ucec);
+my @projects = qw(brca crc gbm hnsc kcc lgg luad lusc ov prad thca ucec);
 open(OUTC,"|gzip -c >/Volumes/areca42TB2/gdc/control_region/all_patient/coverage_all_cont.tsv.gz");
 print OUTC "chr\tstart\tcancer_type\tan_white\tan_black\tan_other\n";
-open(OUTX,"|gzip -c >/Volumes/areca42TB2/gdc/control/all_patient/coverage_X_male_cont.tsv.gz");
+open(OUTX,"|gzip -c >/Volumes/areca42TB2/gdc/control_region/all_patient/coverage_X_male_cont.tsv.gz");
 print OUTX "chr\tstart\tcancer_type\tan_white\tan_black\tan_other\n";
 foreach my $project (@projects){
 		print "doing $project\n";
@@ -73,14 +73,14 @@ sub make_coverage ( $ ){
 		my ($pj,$pj_dir) = ($_[0],"/Volumes/areca42TB2/gdc/control_region/$_[0]/"); #project name
 		my %coverage=();
 		my %coverage_xmale=();
-		my @dpls=`ls $pj_dir/ndepth|grep out|grep -v tout`;
+		my @dpls=`ls $pj_dir/ndepth|grep ndepth`;
 		for(my$file_num=1;@dpls >= $file_num;$file_num++){
 				my %coverage_norm_focal=(); #if defined dpfocal is coverage=ok at normal sequence
 				print "read $pj:depth$file_num\n";
 				my($ndepth,$tdepth) = ("$pj_dir/ndepth/ndepth$file_num.tsv","$pj_dir/tdepth/tdepth$file_num.tsv");
 				$|=1; #バッファのフラッシュ
 		#read norm depth file
-				open(DP,"$ndepth");
+				open(DP,"$ndepth") or die "ERROR::cannot open $ndepth\n";
 				my $ndpcolum=<DP>;chomp$ndpcolum;
 				my @ndpcolum=split(/\t/,$ndpcolum);
 				while(<DP>){
@@ -93,7 +93,7 @@ sub make_coverage ( $ ){
 				}
 				close DP;
 		#read tumor depth file
-				open(DP,"$tdepth");
+				open(DP,"$tdepth") or die "ERROR::cannot open $tdepth\n";
 				my $tdpcolum=<DP>;chomp$tdpcolum;
 				my @tdpcolum=split(/\t/,$tdpcolum);
 				while(<DP>){
