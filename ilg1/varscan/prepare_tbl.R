@@ -1,16 +1,17 @@
-library(tidyr)
+library(tidyverse)
+#library(tidyr)
 #library(plyr)
-library(dplyr)
+#library(dplyr)
 library(pipeR)
-library(stringr)
-library(ggplot2)
+#library(stringr)
+#library(ggplot2)
 library(ggsignif)
 library(gridExtra)
-library(readr)
+#library(readr)
 library(readxl)
 library(XML)
 library(gtools)
-library(purrr)
+#library(purrr)
 library(purrrlyr)
 setwd('/Volumes/areca42TB/tcga/')
 write_df= function(x, path, delim='\t', na='NA', append=FALSE, col_names=!append, ...) {
@@ -92,14 +93,26 @@ classify_consequence = function(.data) {
                                `stop_gained,inframe_insertion`='truncating',
                                `stop_gained,splice_region_variant`='truncating'))
 }
+classify_stage = function(.data) {
+  mutate(.data,
+         stage = dplyr::recode(stage,
+                               `not reported` = 0,
+                               `stage i`    = 1, `stage ia`   = 1, `stage ib`   = 1,
+                               `stage ii`   = 2, `stage iia`  = 2, `stage iib`  = 2, `stage iic`  = 2,
+                               `stage iii`  = 3, `stage iiia` = 3, `stage iiib` = 3, `stage iiic` = 3,
+                               `stage iv`   = 4, `stage iva`  = 4, `stage ivb`  = 4, `stage ivc`  = 4,
+                               `stage x`    =5))
+}
 driver_genes=read_tsv("~/git/driver_genes/driver_genes.tsv")%>>%
   filter(refs>3) %>>%
-  mutate(role=ifelse(role=="oncogene/TSG","TSG",role)) %>>%
+#  mutate(role=ifelse(role=="oncogene/TSG","TSG",role)) %>>%
   mutate(role=ifelse(is.na(role),"TSG",role))
 
-all_patient_info=read_tsv("~/git/all_patient/all_patient_response.tsv") %>>%
+all_patient_info=read_tsv("~/git/all_patient/all_patient_response.tsv",col_types = "cccccddccc") %>>%
   dplyr::rename(patient_id=submitter_id,age=diagnoses.0.age_at_diagnosis,gender=demographic.gender,
-                race=demographic.race,ethnicity=demographic.ethnicity)
+                race=demographic.race,ethnicity=demographic.ethnicity,stage=diagnoses.0.tumor_stage) %>%
+  classify_stage()
+  
 patient_race = all_patient_info %>>%
   mutate(race_=ifelse(race=="white" &ethnicity!="hispanic or latino","white",
                       ifelse(race=="black or african american" &ethnicity!="hispanic or latino",
@@ -169,13 +182,17 @@ cancer_type_maf=read_tsv("/Volumes/areca42TB/tcga/all_patient/cancer_type_all.ma
 norm_maf_all = rbind(body_part_maf%>>%select(-body_part),cancer_type_maf) %>>%
   mutate(LOH=ifelse((soma_or_germ == "somatic" & LOH =="no" & ref != n_allele2),"back_mutation",LOH)) %>>%
   mutate(cancer_type = ifelse((cancer_type=="COAD" | cancer_type=="READ"),"CRC",cancer_type))%>>%
-  mutate(cancer_type = ifelse((cancer_type=="KIRC" | cancer_type=="KIRP" | cancer_type=="KICH"),"KCC",cancer_type))
+  filter(cancer_type != "KICH")
 rm(body_part_maf,cancer_type_maf)
 
 ####################################
 ### read coverage files ####
 coverage_all_by_cancer_type =
-  read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/coverage_all.tsv.gz")
+  read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/coverage_all.tsv.gz") %>>%
+  mutate(cancer_type = ifelse((cancer_type=="COAD" | cancer_type=="READ"),"CRC",cancer_type))%>>%
+  filter(cancer_type != "KICH") %>>%
+  group_by(cancer_type,chr,start) %>>%
+  summarise(an_white = sum(an_white), an_black = sum(an_black), an_other = sum(an_other)) %>>%ungroup()
 coverage_all = coverage_all_by_cancer_type %>>%
   mutate(an_cancer = an_white + an_black + an_other) %>>%
   group_by(chr,start) %>>%
@@ -183,7 +200,12 @@ coverage_all = coverage_all_by_cancer_type %>>%
 
 coverage_male_x_by_cancer_type =
   read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/coverage_X_male.tsv.gz") %>>%
-  rename(an_white_male = an_white, an_black_male = an_black, an_other_male = an_other)
+  rename(an_white_male = an_white, an_black_male = an_black, an_other_male = an_other) %>>%
+  mutate(cancer_type = ifelse((cancer_type=="COAD" | cancer_type=="READ"),"CRC",cancer_type))%>>%
+  filter(cancer_type != "KICH") %>>%
+  group_by(cancer_type,chr,start) %>>%
+  summarise(an_white_male = sum(an_white_male),an_black_male = sum(an_black_male),
+            an_other_male = sum(an_other_male)) %>>%ungroup()
 coverage_male_x = coverage_male_x_by_cancer_type %>>%
   mutate(an_male_cancer = an_white_male + an_black_male + an_other_male) %>>%
   group_by(chr,start) %>>%
@@ -222,6 +244,24 @@ patient_list = norm_maf_all %>>%
   dplyr::select(-n) %>>%
   filter(!is.na(age))
 #write_df(patient_list,"/Volumes/areca42TB/tcga/all_patient/patient_list.tsv")
+
+#pathogenic variantをもつ患者のlist
+patient_with_ps_ = read_tsv("burden_plot/cell2018/charger/tcga/tcga_all_variants_grch38_charger.tsv") %>>%
+  dplyr::rename(chr=Chromosome,start=Start,ref=Reference,alt=Alternate,gene_symbol=HUGO_Symbol,
+                clinvar=ClinVar_Pathogenicity, acmg=ACMG_Classification, charger=CharGer_Classification,
+                trait=ClinVar_Traits) %>>%
+  filter(clinvar=="Pathogenic"|charger=="Pathogenic"|charger=="Likely Pathogenic")%>>%
+  left_join(norm_maf_all) %>>%
+  dplyr::select(gene_symbol,cancer_type,patient_id)
+#write_df(patient_with_ps,"all_patient/pathogenic_site_list.tsv")
+#この中でsignificantなのは？
+patient_with_ps = tibble(cancer_type=c("BRCA", "OV",   "BRCA", "OV",   "KIRP","BRCA","LUAD","PRAD","KIRC","GBM",  "UCEC"),
+       gene_symbol=c("BRCA1","BRCA1","BRCA2","BRCA2","MET", "ATM", "ATM", "ATM", "BAP1","AXIN2","PTEN")) %>>%
+  mutate(significance="significant") %>>%
+  right_join(patient_with_ps_) %>>%
+  dplyr::select(-gene_symbol)
+
+
 #### AF > 5% のsiteのcoverage(patientごと) #########
 ## AF_mid_list.tsvはvarscan_maf_age_plot.Rにて作成
 mid_af_coverage =read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/AF_mid_coverage_by_patient.tsv.gz") %>>%
@@ -230,7 +270,7 @@ mid_af_coverage =read_tsv("/Volumes/areca42TB2/gdc/varscan/all_patient/AF_mid_co
   dplyr::select(-focal) 
 
 
-
+if(0){
 ####################################################################################################################
 ########## somatic mutation ############
 #mutation抽出はgerm_pvalu_plot.Rにて
@@ -299,3 +339,4 @@ somatic_ranking = somatic_maf %>>%
   group_by(cancer_type,mutype,role) %>>%
   mutate(somatic_rank = min_rank(desc(n/cds_length)))%>>%
   dplyr::select(-n)
+}

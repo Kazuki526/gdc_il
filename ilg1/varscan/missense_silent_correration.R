@@ -1,10 +1,10 @@
 ###nonsynonymou(missense)とsilent(synonymous)の数に相関があるのか？など
-MAF=0.0001
+MAF_focal=0.0005
 
 missense_silent_num = all_maf_for_cumulative %>>%
   left_join(driver_genes %>>%dplyr::select(gene,role)%>>%
               dplyr::rename(gene_symbol=gene), by = "gene_symbol") %>>%
-  filter((mutype=="missense"|mutype=="silent") & MAF<MAF) %>>%
+  filter((mutype=="missense"|mutype=="silent") & MAF<MAF_focal) %>>%
   group_by(cancer_type,patient_id,mutype) %>>%
   summarise(mutation_count=n()) %>>%ungroup()%>>%
   tidyr::spread(mutype,mutation_count) %>>%

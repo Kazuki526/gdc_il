@@ -1,5 +1,6 @@
 ######！！！！！！！！注意！！！！！！！！########
 # prepare_tbl.Rを実行してからこのスクリプトを開始する！！！
+loadNamespace('cowplot')
 
 #prepare 1000genomes UK10K EXAC(nonTCGA) data sets
 strip_maf = function(infile) {
@@ -61,12 +62,16 @@ uk10k=strip_maf("/Volumes/areca42TB/ega/file/all_sample_topdriver_region_indelha
 rm(vcf_10k)
 
 ### EXAC nonTCGA ###
-vcf_exac=read_tsv("/Volumes/areca42TB/exac/file/exac_nontcga_liftovered_checked_likevcf.tsv.gz",
-                  col_types = "cdccdddddddddddddddddddddddddddddddddd") 
-exac_nonindel=strip_maf("/Volumes/areca42TB/exac/file/exac_nontcga_topdriver.maf") 
-vcf_exac_indel=read_tsv("/Volumes/areca42TB/exac/file/exac_nontcga_liftovered_checked_likevcf_indel.tsv.gz",
-                        col_types = "cdccdddddddddddddddddddddddddddddddddd")
-exac_indel = strip_maf("/Volumes/areca42TB/exac/file/exac_nontcga_topdriver_indel.maf") 
+vcf_exac=read_tsv("/Volumes/areca42TB/exac/file/nontcga_liftovered_checked_likevcf.tsv.gz",
+                  col_types = "cdccdddddddddddddddddddddddddddddddddd") %>>%
+  mutate(AC_Het=ifelse(AC_Adj==AC_Het+AC_Hom*2,AC_Adj-AC_Hom*2,AC_Het))
+exac_nonindel=strip_maf("/Volumes/areca42TB/exac/file/exac_nontcga_topdriver.maf") %>>%
+  left_join(topdriver_bed%>>%dplyr::select(gene_symbol,strand)) %>>%filter(!is.na(strand))
+vcf_exac_indel=read_tsv("/Volumes/areca42TB/exac/file/nontcga_liftovered_checked_likevcf_indel.tsv.gz",
+                        col_types = "cdccdddddddddddddddddddddddddddddddddd")　%>>%
+  mutate(AC_Het=ifelse(AC_Adj==AC_Het+AC_Hom*2,AC_Adj-AC_Hom*2,AC_Het)) 
+exac_indel = strip_maf("/Volumes/areca42TB/exac/file/exac_nontcga_topdriver_indel.maf") %>>%
+  left_join(topdriver_bed%>>%dplyr::select(gene_symbol,strand)) %>>%filter(!is.na(strand))
 
 vcf_exac =rbind(vcf_exac,vcf_exac_indel) %>>%
   mutate(chr=paste0("chr",chr))
@@ -77,16 +82,122 @@ rm(vcf_exac_indel,exac_nonindel,exac_indel)
 ########################################################################################################################
 ########################################################################################################################
 ########################################################################################################################
-white_prop=4424/6514
-black_prop=1412/6514
-cancer_type_prop = norm_maf_all %>>%
-  count(cancer_type,patient_id,age)%>>%
-  left_join(patient_race)%>>%count(cancer_type,race) %>>%
-  mutate(prop=nn/6514)
+#### all cancer type ####
+TFT = function(.tbl){
+  case_f =.tbl$taf_cancer
+  control_f = .tbl$taf_cont
+  case =.tbl$an_cancer
+  control = .tbl$an_cont
+  ifelse(case_f ==0 & control_f==0, 1,
+         prop.test(c(case_f*case,control_f*control),c(case,control),alternative = "greater")$p.value)
+}
+TFT_all_cancer_type_ns = 
+  function(.tbl,.cont_tbl,.focal_site=ns_focal_site){
+    full_join(.tbl %>>% group_by(chr,start,end,ref,alt) %>>%
+                summarise(ac_cancer=sum(ac_cancer), an_cancer=sum(an_cancer),
+                          an_all_cantype = first(an_all_cantype), gene_symbol=first(gene_symbol),
+                          Consequence=first(Consequence), mutype=first(mutype)),
+              .cont_tbl) %>>%
+      left_join(.focal_site) %>>%filter(!is.na(focal)) %>>%
+      mutate(an_all_cantype = ifelse(is.na(an_all_cantype),1,an_all_cantype),
+             an_cont   = ifelse(is.na(an_cont  ),1,an_cont  )) %>>%
+      mutate(af_cancer = ifelse(is.na(ac_cancer),0,ac_cancer/an_all_cantype),
+             af_cont   = ifelse(is.na(ac_cont  ),0,ac_cont  /an_cont  )) %>>%View
+      group_by(gene_symbol,mutype) %>>%
+      summarise(taf_cancer = sum(af_cancer,na.rm = T),taf_cont =sum(af_cont,na.rm = T),
+                an_cancer = max(an_all_cantype,na.rm = T),an_cont = max(an_cont,na.rm = T)) %>>%
+      ungroup() %>>%
+      nest(-gene_symbol,-mutype)%>>%
+      mutate(tft = purrr::map(data, ~TFT(.))) %>>%unnest()%>>%
+      {left_join(driver_genes %>>%dplyr::rename(gene_symbol=gene)%>>%dplyr::select(gene_symbol,role),.)} %>>%
+      mutate(tft =ifelse(is.na(tft),1,tft)) %>>%
+      mutate(FDR = p.adjust(tft,"fdr"))
+  }
+#### plot ####
+FDR_barplot_ns = function(.tbl,.FDR=0.2){
+  log_reverse = function(.log){
+    parse(text = paste0("10^",-log10(.log)))
+  }
+  .tbl =.tbl %>>% filter(FDR < .FDR)%>>%
+    arrange(FDR) %>>%
+    mutate(FDR=10^(-log10(FDR)))
+  .plot_fdr = function(.tibble){
+    .tibble %>>%
+      ggplot(aes(x=reorder(gene_symbol,desc(FDR)),y=FDR,fill=gene_symbol))+
+      geom_bar(stat = "identity")+
+      geom_hline(yintercept = 20,size=0.2)+
+      geom_hline(yintercept = 0,size=1,colour="gray")+
+      scale_y_log10(labels = log_reverse)+
+      #scale_fill_brewer(palette="Set1")+
+      guides(fill="none")+
+      theme_bw()+
+      theme( panel.grid.major.x = element_blank(),
+             panel.background = element_blank(),
+             axis.ticks.x = element_blank(),
+             axis.title.x = element_blank(),
+             axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5))
+  }
+  .mis_plot = .plot_fdr(.tbl %>>%filter(mutype=="missense"))+ggtitle("nonsynonymous")
+  .sil_plot = .plot_fdr(.tbl %>>%filter(mutype=="silent"))+ggtitle("synonymous")
+  .plot = cowplot::plot_grid(.mis_plot,.sil_plot, ncol = 1)
+  plot(.plot)
+  return(.plot)
+}
+#### by cancer type ####
+TFT_by_cancer_type_ns = function(.tbl,.control,.focal_site=ns_focal_site){
+  full_join(.tbl,.control) %>>%
+    left_join(.focal_site) %>>%filter(!is.na(focal)) %>>%
+    mutate(an_cancer = ifelse(is.na(an_cancer),1,an_cancer),
+           an_cont   = ifelse(is.na(an_cont  ),1,an_cont  )) %>>%
+    mutate(af_cancer = ifelse(is.na(ac_cancer),0,ac_cancer/an_cancer),
+           af_cont   = ifelse(is.na(ac_cont  ),0,ac_cont  /an_cont  )) %>>%
+    group_by(gene_symbol,mutype) %>>%
+    summarise(taf_cancer = sum(af_cancer,na.rm = T),taf_cont=sum(af_cont,na.rm = T),
+              an_cancer = max(an_cancer,na.rm = T),an_cont = max(an_cont,na.rm = T)) %>>%
+    ungroup() %>>%
+    nest(-gene_symbol,-mutype) %>>%
+    mutate(tft = purrr::map(data, ~TFT(.))) %>>%unnest()%>>%
+    {left_join(driver_genes %>>%dplyr::rename(gene_symbol=gene)%>>%dplyr::select(gene_symbol,role),.)} %>>%
+    mutate(tft =ifelse(is.na(tft),1,tft)) %>>%
+    mutate(FDR = p.adjust(tft,"fdr"))
+}
+######## bubble plot #########
+bubble_plot_ns = function(.tbl_by_CT,.tbl_all_CT,.FDR=0.1){
+  .tbl = rbind(.tbl_by_CT,
+               .tbl_all_CT %>>% mutate(cancer_type = "Pan-cancer")) %>>%
+    group_by(gene_symbol,mutype) %>>%
+    mutate(focal = ifelse(all(FDR > .FDR),"no","ok")) %>>% #singleton, doubleton cutしなかった時用
+    filter(focal=="ok") %>>%ungroup() %>>%
+    mutate(canty_order=ifelse(cancer_type=="Pan-cancer",2,1)) %>>%
+    filter(taf_cancer != 0)
+  .plot_bubble = function(.tibble){
+    .tibble %>>%
+      ggplot()+
+      geom_point(aes(x=reorder(as.factor(cancer_type),canty_order),
+                     y=reorder(as.factor(gene_symbol),desc(as.factor(gene_symbol))),
+                     size=taf_cancer*100,color=cancer_type))+
+      geom_point(data = .tibble%>>%filter(FDR < 0.05),
+                 aes(x=cancer_type,y=gene_symbol,size=taf_cancer*300),shape =21,stroke = 1)+
+      #scale_color_brewer(palette = "Set1")+
+      guides(colour="none",size= guide_legend("% of samples "))+
+      theme(legend.position = "bottom",
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            panel.background = element_blank(),
+            axis.ticks = element_blank(),
+            axis.title = element_blank(),
+            axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5))
+  }
+  .mis_bubble = .plot_bubble(.tbl %>>% filter(mutype == "missense"))+ggtitle("nonsynonymous")
+  .sil_bubble = .plot_bubble(.tbl %>>% filter(mutype == "silent"))+ggtitle("synonymous")
+  .plot = cowplot::plot_grid(.mis_bubble,.sil_bubble, ncol = 2)
+  plot(.plot)
+  return(.plot)
+}
 ##################################
-# splice & truncating (ref minor でtruncating or spliceはないのでとりあえず無視)
-truncating_focal_site = quality_filter(norm_maf_all,.data_type="maf") %>>%
-  filter(mutype == "splice"| mutype =="truncating") %>>%
+# white
+ns_focal_site = quality_filter(norm_maf_all,.data_type="maf") %>>%
+  filter(mutype == "missense"| mutype =="silent") %>>%
   dplyr::select(-alt) %>>%
   tidyr::gather(allele,alt,n_allele1,n_allele2) %>>%
   filter(ref != alt)%>>%
@@ -95,7 +206,7 @@ truncating_focal_site = quality_filter(norm_maf_all,.data_type="maf") %>>%
             Consequence=first(Consequence),mutype=first(mutype)) %>>%
   ungroup() %>>%
   left_join(coverage_all) %>>%
-  full_join(quality_filter(exac)) %>>% filter(mutype == "splice"| mutype =="truncating") %>>%
+  full_join(quality_filter(exac)) %>>% filter(mutype == "missense"| mutype =="silent") %>>%
   filter((is.na(AC_Adj)|AC_Adj/AN_Adj *100 <0.05), sum(AC_Adj,ac_cancer,na.rm = T) >2, chr!="chrX") %>>%
   mutate(focal = "ok") %>>%
   dplyr::select(gene_symbol,chr,start,end,ref,alt,Consequence,mutype,focal)
@@ -110,129 +221,35 @@ cancer_white = quality_filter(norm_maf_all,.data_type="maf") %>>%
             Consequence=first(Consequence),mutype=first(mutype)) %>>%
   ungroup() %>>%
   dplyr::select(gene_symbol,chr,start,end,ref,alt,Consequence,mutype,cancer_type,ac_cancer)%>>%
-  left_join(coverage_all)
+  left_join(coverage_all_by_cancer_type %>>%
+              dplyr::rename(an_cancer =an_white) %>>%
+              dplyr::select(-an_black,-an_other)) %>>%
+  left_join(coverage_all_by_cancer_type %>>%
+              group_by(chr,start) %>>%summarise(an_all_cantype = sum(an_white)) %>>%
+              ungroup()) %>>%
+  filter(an_all_cantype > max(an_all_cantype)*0.5)
 exac_white = exac %>>% quality_filter() %>>%
   filter(chr != "chrX") %>>%
   mutate(ac_cont = AC_FIN + AC_NFE,an_cont = AN_FIN + AN_NFE) %>>%
-  dplyr::select(gene_symbol,chr,start,end,ref,alt,Consequence,mutype,ac_cont,an_cont)
+  dplyr::select(gene_symbol,chr,start,end,ref,alt,Consequence,mutype,ac_cont,an_cont)%>>%
+  filter(an_cont > max(an_cont)*0.5)
 
-#### all cancer type ####
-TFT = function(.tbl){
-  case_f =.tbl$taf_cancer
-  control_f = .tbl$taf_cont
-  case =.tbl$an_cancer
-  control = .tbl$an_cont
-  ifelse(case_f ==0 & control_f==0, 1,
-         prop.test(c(case_f*case,control_f*control),c(case,control),alternative = "greater")$p.value)
-}
-TFT_all_cancer_type = 
-  function(.tbl,.cont_tbl,.focal_site=truncating_focal_site,.race=white_prop){
-    full_join(.tbl %>>% group_by(chr,start,end,ref,alt) %>>%
-                summarise(ac_cancer=sum(ac_cancer),gene_symbol=first(gene_symbol),
-                          Consequence=first(Consequence),mutype=first(mutype),an_cancer=first(an_cancer)),
-              .cont_tbl) %>>%
-      left_join(.focal_site) %>>%filter(!is.na(focal)) %>>%
-      mutate(an_cancer = ifelse(is.na(an_cancer),1,round(an_cancer*.race)), ####################################
-             an_cont   = ifelse(is.na(an_cont  ),1,an_cont  )) %>>%
-      mutate(af_cancer = ifelse(is.na(ac_cancer),0,ac_cancer/an_cancer),
-             af_cont   = ifelse(is.na(ac_cont  ),0,ac_cont  /an_cont  )) %>>%
-      group_by(gene_symbol) %>>%
-      summarise(taf_cancer = sum(af_cancer,na.rm = T),taf_cont =sum(af_cont,na.rm = T),
-                an_cancer = max(an_cancer,na.rm = T),an_cont = max(an_cont,na.rm = T)) %>>%
-      nest(-gene_symbol)%>>%
-      mutate(tft = purrr::map(data, ~TFT(.))) %>>%unnest()%>>%
-      {left_join(driver_genes %>>%dplyr::rename(gene_symbol=gene)%>>%dplyr::select(gene_symbol,role),.)} %>>%
-      mutate(tft =ifelse(is.na(tft),1,tft)) %>>%
-      mutate(FDR = p.adjust(tft,"fdr"))
-  }
-total_frequency_truncate = TFT_all_cancer_type(cancer_white,exac_white)
-#### plot ####
-FDR_barplot = function(.tbl,.FDR=0.5){
-  log_reverse = function(.log){
-    parse(text = paste0("10^",-log10(.log)))
-  }
-  .tbl %>>% filter(FDR < .FDR)%>>%
-    arrange(FDR) %>>%
-    mutate(FDR=FDR*(100^(-log10(FDR))))%>>%
-    ggplot(aes(x=reorder(gene_symbol,desc(FDR)),y=FDR,fill=gene_symbol))+
-    geom_bar(stat = "identity")+
-    geom_hline(yintercept = 50,size=0.2)+
-    geom_hline(yintercept = 0,size=1,colour="gray")+
-    scale_y_log10(labels = log_reverse)+
-    #scale_fill_brewer(palette="Set1")+
-    guides(fill="none")+
-    theme_bw()+
-    theme( panel.grid.major.x = element_blank(),
-           panel.background = element_blank(),
-           axis.ticks.x = element_blank(),
-           axis.title.x = element_blank(),
-           axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5))
-}
-.plot=FDR_barplot(total_frequency_truncate)
-.plot
-ggsave("burden_plot/truncate_fdr_white_likeCharles.pdf",.plot,height = 7,width =4)
+total_frequency_ns = TFT_all_cancer_type_ns(cancer_white,exac_white)
+.plot_tft_w = FDR_barplot_ns(total_frequency_ns,.FDR = 0.1)
+ggsave("burden_plot/ns_fdr_white_likeCharles.pdf",.plot_tft_w,height = 10,width =4)
 #ggsave("burden_plot/truncate_fdr_likeCharles_cut_singleduble.pdf",.plot,height = 4,width = 2.5)
 
-#### by cancer type ####
-TFT_by_cancer_type = function(.tbl,.control,.focal_site=truncating_focal_site){
-  full_join(.tbl,.control) %>>%
-    left_join(.focal_site) %>>%filter(!is.na(focal)) %>>%
-    #filter(mutype == "truncating" | mutype == "splice") %>>% #singleton, doubleton cutしない時用
-    mutate(an_cancer = ifelse(is.na(an_cancer),1,an_cancer),
-           an_cont   = ifelse(is.na(an_cont  ),1,an_cont  )) %>>%
-    mutate(af_cancer = ifelse(is.na(ac_cancer),0,ac_cancer/an_cancer),
-           af_cont   = ifelse(is.na(ac_cont  ),0,ac_cont  /an_cont  )) %>>%
-    group_by(gene_symbol) %>>%
-    summarise(taf_cancer = sum(af_cancer,na.rm = T),taf_cont=sum(af_cont,na.rm = T),
-              an_cancer = max(an_cancer,na.rm = T),an_cont = max(an_cont,na.rm = T)) %>>%
-    nest(-gene_symbol) %>>%
-    mutate(tft = purrr::map(data, ~TFT(.))) %>>%unnest()%>>%
-    {left_join(driver_genes %>>%dplyr::rename(gene_symbol=gene)%>>%dplyr::select(gene_symbol,role),.)} %>>%
-    mutate(tft =ifelse(is.na(tft),1,tft)) %>>%
-    mutate(FDR = p.adjust(tft,"fdr"))
-}
-total_frequency_truncate_by_cancertype = cancer_white %>>%
-  left_join(cancer_type_prop %>>% filter(race == "white")) %>>%
-  mutate(an_cancer = round(an_cancer * prop)) %>>%
+total_frequency_ns_by_cancertype = cancer_white %>>%
   dplyr::select(gene_symbol,chr,start,end,ref,alt,Consequence,
                 mutype,cancer_type,ac_cancer,an_cancer)%>>%
   nest(-cancer_type) %>>%
-  mutate(data = purrr::map(data,~TFT_by_cancer_type(.,exac_white))) %>>%unnest()
-
-######## bubble plot #########
-bubble_plot = function(.tbl_by_CT,.tbl_all_CT,.FDR=0.1){
-  rbind(.tbl_by_CT,
-        .tbl_all_CT %>>% mutate(cancer_type = "Pan-cancer")) %>>%
-    group_by(gene_symbol) %>>%
-    mutate(focal = ifelse(all(FDR > .FDR),"no","ok")) %>>% #singleton, doubleton cutしなかった時用
-    filter(focal=="ok") %>>%ungroup() %>>%
-    mutate(canty_order=ifelse(cancer_type=="Pan-cancer",2,1))%>>%
-    ggplot()+
-    geom_point(aes(x=reorder(as.factor(cancer_type),canty_order),
-                   y=reorder(as.factor(gene_symbol),desc(as.factor(gene_symbol))),
-                   size=taf_cancer*100,color=cancer_type))+
-    geom_point(data = .tbl_by_CT%>>%filter(FDR < 0.05),
-               aes(x=cancer_type,y=gene_symbol,size=taf_cancer*300),shape =21,stroke = 1)+
-    #scale_color_brewer(palette = "Set1")+
-    guides(colour="none",size= guide_legend("% of samples "))+
-    theme(legend.position = "bottom",
-          panel.grid.major = element_blank(),
-          panel.grid.minor = element_blank(),
-          panel.background = element_blank(),
-          axis.ticks = element_blank(),
-          axis.title = element_blank(),
-          axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5))
-}
-.plot = bubble_plot(total_frequency_truncate_by_cancertype,
-                    total_frequency_truncate)
-.plot
-ggsave("burden_plot/truncate_bubble_plot_white.pdf",.plot,height = 7,width = 4)
-####################################################################################################################
-####################################################################################################################
-####################################################################################################################
-# nonsynonymou, synonymousでTFTをやってみる。
-sile_miss_focal_site = quality_filter(norm_maf_all,.data_type="maf") %>>%
-  filter(mutype == "silent"| mutype =="missense") %>>%
+  mutate(data = purrr::map(data,~TFT_by_cancer_type_ns(.,exac_white))) %>>%unnest()
+.plot_bb_w = bubble_plot_ns(total_frequency_ns_by_cancertype,total_frequency_ns,.FDR = 0.05)
+ggsave("burden_plot/ns_bubble_plot_white.pdf",.plot_bb_w,height = 7,width = 8)
+############################################
+#black
+ns_focal_site_black = quality_filter(norm_maf_all,.data_type="maf") %>>%
+  filter(mutype == "missense"| mutype =="silent") %>>%
   dplyr::select(-alt) %>>%
   tidyr::gather(allele,alt,n_allele1,n_allele2) %>>%
   filter(ref != alt)%>>%
@@ -241,15 +258,205 @@ sile_miss_focal_site = quality_filter(norm_maf_all,.data_type="maf") %>>%
             Consequence=first(Consequence),mutype=first(mutype)) %>>%
   ungroup() %>>%
   left_join(coverage_all) %>>%
-  full_join(quality_filter(exac)) %>>% filter(mutype == "silent"| mutype =="missense") %>>%
-  filter((is.na(AC_Adj)|AC_Adj/AN_Adj *100 <0.05), sum(AC_Adj,ac_cancer,na.rm = T) >2, chr!="chrX") %>>%
+  full_join(quality_filter(exac)) %>>% filter(mutype == "missense"| mutype =="silent") %>>%
+  filter((is.na(AC_AFR)|AC_AFR/AN_AFR *100 <0.05), sum(AC_Adj,ac_cancer,na.rm = T) >2, chr!="chrX") %>>%
+  mutate(focal = "ok") %>>%
+  dplyr::select(gene_symbol,chr,start,end,ref,alt,Consequence,mutype,focal) 
+cancer_black = quality_filter(norm_maf_all,.data_type="maf") %>>%
+  left_join(patient_race) %>>%filter(race=="black") %>>%
+  dplyr::select(-alt) %>>%
+  tidyr::gather(allele,alt,n_allele1,n_allele2) %>>%
+  filter(ref != alt, chr !="chrX")%>>%
+  group_by(cancer_type,chr,start,end,ref,alt) %>>%
+  summarise(ac_cancer=n(),gene_symbol=first(gene_symbol),
+            Consequence=first(Consequence),mutype=first(mutype)) %>>%
+  ungroup() %>>%
+  dplyr::select(gene_symbol,chr,start,end,ref,alt,Consequence,mutype,cancer_type,ac_cancer)%>>%
+  left_join(coverage_all_by_cancer_type %>>%
+              dplyr::rename(an_cancer =an_black) %>>%
+              dplyr::select(-an_white,-an_other)) %>>%
+  left_join(coverage_all_by_cancer_type %>>%
+              group_by(chr,start) %>>%summarise(an_all_cantype = sum(an_black)) %>>%
+              ungroup())%>>%
+  filter(an_all_cantype > max(an_all_cantype)*0.5)
+exac_black = exac %>>% quality_filter() %>>%
+  filter(chr != "chrX") %>>%
+  mutate(ac_cont = AC_AFR, an_cont = AN_AFR) %>>%
+  dplyr::select(gene_symbol,chr,start,end,ref,alt,Consequence,mutype,ac_cont,an_cont)%>>%
+  filter(an_cont > max(an_cont)*0.5)
+total_frequency_ns_black = TFT_all_cancer_type_ns(cancer_black,exac_black,
+                                                  .focal_site = ns_focal_site_black)
+.plot_tft_b = FDR_barplot_ns(total_frequency_ns_black,.FDR = 0.2)
+ggsave("burden_plot/ns_fdr_black_likeCharles.pdf",.plot_tft_b,height = 7, width = 2)
+
+
+total_frequency_ns_by_cancertype_black = cancer_black %>>%
+  dplyr::select(gene_symbol,chr,start,end,ref,alt,Consequence,
+                mutype,cancer_type,ac_cancer,an_cancer)%>>%
+  nest(-cancer_type) %>>%
+  mutate(data = purrr::map(data,~TFT_by_cancer_type_ns(
+    .,exac_black,.focal_site=ns_focal_site_black))) %>>%unnest()
+.plot_bb_b = bubble_plot_ns(total_frequency_ns_by_cancertype_black,total_frequency_ns_black)
+ggsave("burden_plot/ns_bubble_plot_black.pdf",.plot_bb_b,height = 5,width = 8)
+
+## 1000 genomes
+sample_num_1kg_white=1338
+maf_1kg_all=read_tsv("/working/1000genomes/maf/extract/all.maf",
+                     col_types = "ccccddcccccccccc") #germ_pvalue_plot.Rにて作成
+tally_1kg_white= maf_1kg_all %>>%
+  left_join(thousand_genome_info) %>>%filter(SPC=="EUR") %>>%
+  filter(!str_detect(Consequence,"intron_variant")) %>>%
+  filter(!mutype=="flank") %>>%
+  group_by(gene_symbol,ref,alt,chr,start,end,mutype,PolyPhen,Consequence) %>>%
+  summarise(ac_cont=n()) %>>%ungroup() %>>%
+  mutate(chr=paste0("chr",chr),an_cont=sample_num_1kg_white) %>>%
+  quality_filter()
+rm(maf_1kg_all)
+total_frequency_ns_1kg = TFT_all_cancer_type_ns(cancer_white,tally_1kg_white)
+.plot_tft_1 = FDR_barplot_ns(total_frequency_ns_1kg,.FDR = 0.2)
+ggsave("burden_plot/1kg/ns_fdr_white_likeCharles.pdf",.plot_tft_1,height = 7, width = 5)
+
+total_frequency_ns_by_cancertype_1kg = cancer_white %>>%
+  dplyr::select(gene_symbol,chr,start,end,ref,alt,Consequence,
+                mutype,cancer_type,ac_cancer,an_cancer)%>>%
+  nest(-cancer_type) %>>%
+  mutate(data = purrr::map(data,~TFT_by_cancer_type_ns(.,tally_1kg_white))) %>>%unnest()
+.plot_bb_1 = bubble_plot_ns(total_frequency_ns_by_cancertype_1kg,total_frequency_ns_1kg)
+ggsave("burden_plot/1kg/ns_bubble_plot_white.pdf",.plot_bb_1,height = 6,width = 8)
+
+## UK10K
+ns_focal_site_uk = quality_filter(norm_maf_all,.data_type="maf") %>>%
+  filter(mutype == "missense"| mutype =="silent") %>>%
+  dplyr::select(-alt) %>>%
+  tidyr::gather(allele,alt,n_allele1,n_allele2) %>>%
+  filter(ref != alt)%>>%
+  group_by(chr,start,end,ref,alt) %>>%
+  summarise(ac_cancer=n(),gene_symbol=first(gene_symbol),
+            Consequence=first(Consequence),mutype=first(mutype)) %>>%
+  ungroup() %>>%
+  full_join(quality_filter(exac) %>>% filter(mutype == "missense"| mutype =="silent"))%>>%
+  full_join(quality_filter(uk10k) %>>%filter(mutype == "missense"| mutype =="silent"))%>>%
+  filter((is.na(AC_Adj)|AC_Adj/AN_Adj *100 <0.05), sum(AC_Adj,ac_cancer,ac_uk,na.rm = T) >2, chr!="chrX") %>>%
   mutate(focal = "ok") %>>%
   dplyr::select(gene_symbol,chr,start,end,ref,alt,Consequence,mutype,focal)
-total_frequency_sile_miss_white = TFT_all_cancer_type(cancer_white,exac_white,.silent_missense = T)
-.plot = FDR_barplot(total_frequency_sile_miss_white,.si)
-.plot
+uk_tft = uk10k %>>% quality_filter() %>>%
+  dplyr::rename(ac_cont = ac_uk,an_cont = an_uk) %>>%
+  dplyr::select(gene_symbol,chr,start,end,ref,alt,Consequence,mutype,ac_cont,an_cont) %>>%
+  filter(an_cont > max(an_cont)*0.5)
+total_frequency_ns_uk =
+  TFT_all_cancer_type_ns(cancer_white, uk_tft,.focal_site = ns_focal_site_uk)
+.plot_bb_u = FDR_barplot_ns(total_frequency_ns_uk,.FDR = 0.2)
+ggsave("burden_plot/uk10k/ns_fdr_white_likeCharles.pdf",.plot_tft_u,height = 7, width = 2)
+total_frequency_ns_by_cancertype_uk = cancer_white %>>%
+  dplyr::select(gene_symbol,chr,start,end,ref,alt,Consequence,
+                mutype,cancer_type,ac_cancer,an_cancer)%>>%
+  nest(-cancer_type) %>>%
+  mutate(data = purrr::map(data,~TFT_by_cancer_type_ns(.,uk_tft,ns_focal_site_uk))) %>>%
+  unnest()
+.plot_bb_u = bubble_plot_ns(total_frequency_ns_by_cancertype_uk,total_frequency_ns_uk)
+ggsave("burden_plot/uk10k/ns_bubble_plot_white.pdf",.plot_bb_u,height = 6, width = 8)
 
+cowplot::plot_grid(.plot_bb_w,.plot_bb_b,.plot_bb_1,.plot_bb_u,
+                   ncol= 2)
 
+####################################################################################################################
+####################################################################################################################
+####################################################################################################################
+# nonsynonymou, synonymous
+#white, black,1000genomes, UK10Kで比較
+log_reverse = function(.log){
+  parse(text = paste0("10^",-log10(.log)))
+}
+all_ns_fdr =  bind_rows(total_frequency_ns %>>%mutate(data_base = "ExAC_EUR"),
+          total_frequency_ns_black %>>%mutate(data_base = "ExAC_AFR")) %>>%
+  bind_rows(total_frequency_ns_1kg %>>%mutate(data_base = "1KG_EUR")) %>>%
+  bind_rows(total_frequency_ns_uk  %>>%mutate(data_base = "UK10K")) 
+all_ns_plot = function(.tbl, .mutype){
+  .tbl$db_order = factor(.tbl$data_base,
+                         levels = c("ExAC_EUR","ExAC_AFR","1KG_EUR","UK10K"))
+  .plot = .tbl %>>%
+    filter(mutype == .mutype) %>>%
+    group_by(gene_symbol) %>>%
+    filter(min(FDR) < 0.05) %>>% ungroup() %>>%
+    mutate(FDR=10^(-log10(FDR)))%>>%
+    mutate(FDR = ifelse(FDR>1e10,1e10,FDR)) %>>%
+    ggplot(aes(x=gene_symbol, y=FDR ,fill=gene_symbol))+
+    geom_bar(stat = "identity")+
+    geom_hline(yintercept = 20,size=0.2)+
+    geom_hline(yintercept = 0,size=1,colour="gray")+
+    scale_y_log10(labels = log_reverse, limits = c(1,1e10),expand = c(0,0))+
+    #scale_fill_brewer(palette="Set1")+
+    guides(fill="none")+
+    facet_grid( db_order ~ mutype)+
+    theme_bw()+
+    theme( panel.grid.major.x = element_blank(),
+           panel.background = element_blank(),
+           axis.ticks.x = element_blank(),
+           axis.title.x = element_blank(),
+           axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5))
+  plot(.plot)
+  return(.plot)
+}
+.n_all_fdr_plot = all_ns_fdr %>>%all_ns_plot(.mutype = "missense")
+.s_all_fdr_plot = all_ns_fdr %>>%all_ns_plot(.mutype = "silent")
+cowplot::plot_grid(.n_all_fdr_plot,.s_all_fdr_plot,ncol = 2,nrow = 1)
+ggsave("burden_plot/fig/ns_fdr_all_db.pdf",height=12,width=8,
+  cowplot::plot_grid(.n_all_fdr_plot,.s_all_fdr_plot+theme(axis.title = element_blank())
+                     ,ncol = 2,nrow = 1))
+
+#bubble plotも並べる
+all_ns_fdr_by_cancertype =
+  bind_rows(total_frequency_ns_by_cancertype,
+            total_frequency_ns %>>%mutate(cancer_type ="Pan-cancer"))%>>%
+  mutate(data_base = "ExAC_EUR") %>>%
+  bind_rows(bind_rows(total_frequency_ns_by_cancertype_black,
+                    total_frequency_ns_black %>>%mutate(cancer_type ="Pan-cancer"))%>>%
+             mutate(data_base = "ExAC_AFR")) %>>%
+  bind_rows(bind_rows(total_frequency_ns_by_cancertype_1kg,
+                      total_frequency_ns_1kg %>>%mutate(cancer_type ="Pan-cancer")) %>>%
+              mutate(data_base = "1KG_EUR")) %>>%
+  bind_rows(bind_rows(total_frequency_ns_by_cancertype_uk,
+             total_frequency_ns_uk %>>%mutate(cancer_type ="Pan-cancer")) %>>%
+              mutate(data_base = "UK10K")) 
+all_ns_bubble_plot = function(.tbl, .mutype){
+  .tbl$db_order = factor(.tbl$data_base,
+                         levels = c("ExAC_EUR","ExAC_AFR","1KG_EUR","UK10K"))
+  .tbl = .tbl %>>%filter(mutype == .mutype)
+  .plot = .tbl %>>%
+    group_by(gene_symbol,data_base) %>>%
+    filter(min(FDR) < 0.1) %>>% ungroup() %>>%
+    filter(taf_cancer != 0)%>>%
+    mutate(canty_order=ifelse(cancer_type=="Pan-cancer",2,1)) %>>%
+    ggplot()+
+    geom_point(aes(x=reorder(as.factor(cancer_type),canty_order),
+                   y=reorder(as.factor(gene_symbol),desc(as.factor(gene_symbol))),
+                   size=taf_cancer*100,color=cancer_type))+
+    geom_point(data = .tbl%>>%filter(FDR < 0.05),
+               aes(x=cancer_type,y=gene_symbol,size=taf_cancer*300),shape =21,stroke = 1)+
+    #scale_color_brewer(palette = "Set1")+
+    scale_size(breaks = c(10,20))+
+    guides(colour="none",size= guide_legend("% of samples "))+
+    facet_grid( db_order ~ mutype,scales = "free")+
+    theme(panel.grid.minor = element_blank(),
+          panel.background =  element_rect(fill = "white", colour = "grey50"),
+          axis.ticks = element_blank(),
+          axis.title = element_blank(),
+          axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5))
+  plot(.plot)
+  return(.plot)
+}
+.n_all_bubble_plot = all_ns_fdr_by_cancertype %>>%all_ns_bubble_plot(.mutype = "missense")
+.s_all_bubble_plot = all_ns_fdr_by_cancertype %>>%all_ns_bubble_plot(.mutype = "silent")
+cowplot::plot_grid(.n_all_bubble_plot,.s_all_bubble_plot,ncol = 2,nrow = 1)
+ggsave("burden_plot/fig/ns_bubble_plot_all_db.pdf",height=12,width=12,
+       cowplot::plot_grid(.n_all_bubble_plot+theme(legend.position = "none"),
+                          .s_all_bubble_plot+theme(legend.position = "right")
+                          ,ncol = 2,nrow = 1,rel_widths = c(1,1.4)))
+  
+  
+  
+  
+  
 #上同様にtotal frequency test
 TFT_perm_by_row = function(.tbl){
   TFT = function(case_f,control_f,case,control){

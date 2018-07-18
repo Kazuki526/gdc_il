@@ -1,16 +1,17 @@
-library(tidyr)
+library(tidyverse)
+#library(tidyr)
 #library(plyr)
-library(dplyr)
+#library(dplyr)
 library(pipeR)
-library(stringr)
-library(ggplot2)
+#library(stringr)
+#library(ggplot2)
 library(ggsignif)
 library(gridExtra)
-library(readr)
+#library(readr)
 library(readxl)
 library(XML)
 library(gtools)
-library(purrr)
+#library(purrr)
 library(purrrlyr)
 setwd('/Volumes/areca42TB/tcga/')
 write_df= function(x, path, delim='\t', na='NA', append=FALSE, col_names=!append, ...) {
@@ -92,9 +93,21 @@ classify_consequence = function(.data) {
 }
 
 
-all_patient_info=read_tsv("~/git/all_patient/all_patient_response.tsv") %>>%
+classify_stage = function(.data) {
+  mutate(.data,
+         stage = dplyr::recode(stage,
+                               `not reported` = 0,
+                               `stage i`    = 1, `stage ia`   = 1, `stage ib`   = 1,
+                               `stage ii`   = 2, `stage iia`  = 2, `stage iib`  = 2, `stage iic`  = 2,
+                               `stage iii`  = 3, `stage iiia` = 3, `stage iiib` = 3, `stage iiic` = 3,
+                               `stage iv`   = 4, `stage iva`  = 4, `stage ivb`  = 4, `stage ivc`  = 4,
+                               `stage x`    =5))
+}
+all_patient_info=read_tsv("~/git/all_patient/all_patient_response.tsv",col_types = "cccccddccc") %>>%
   dplyr::rename(patient_id=submitter_id,age=diagnoses.0.age_at_diagnosis,gender=demographic.gender,
-                race=demographic.race,ethnicity=demographic.ethnicity)
+                race=demographic.race,ethnicity=demographic.ethnicity,stage=diagnoses.0.tumor_stage) %>%
+  classify_stage()
+
 patient_race = all_patient_info %>>%
   mutate(race_=ifelse(race=="white" &ethnicity!="hispanic or latino","white",
                       ifelse(race=="black or african american" &ethnicity!="hispanic or latino",
@@ -103,7 +116,8 @@ patient_race = all_patient_info %>>%
   dplyr::select(patient_id,race_) %>>%
   dplyr::rename(race=race_)
 control_genes = read_tsv("/Volumes/areca42TB/GRCh38_singlefasta/control_genes.tsv") %>>%
-  filter(gene_symbol != "OR8U1") %>>% mutate(focal="yes")
+  filter(gene_symbol != "OR8U1") %>>% #GRCh37とGRCh38でゲノム上での向きが逆転しているから
+  mutate(focal="yes")
 #############################################################################################################
 ##################################################  nom_maf  ################################################
 patient_list = read_tsv("/Volumes/areca42TB/tcga/all_patient/patient_list.tsv")
@@ -122,10 +136,10 @@ if(0){
         classify_consequence()
     }
     #.bp is bodypart of it cancer
-    maf=tibble::tibble(file=list.files(paste0("/Volumes/TLP02-backup2/gdc_download/",.bp,"/maf"))) %>>%
-      mutate(filename = paste0('/Volumes/TLP02-backup2/gdc_download/',.bp,"/maf/",file),
+    maf=tibble::tibble(file=list.files(paste0("/Volumes/areca42TB2/gdc/control_region/",.bp,"/maf"))) %>>%
+      mutate(filename = paste0('/Volumes/areca42TB2/gdc/control_region/',.bp,"/maf/",file),
              patient_id = str_replace(file,".maf",""))%>>%
-      mutate(purrr::map(filename,~strip_maf(.))) %>>%
+      mutate(tbl=purrr::map(filename,~strip_maf(.))) %>>%
       unnest() %>>%#(?.)%>>%
       dplyr::rename(gene_symbol=Hugo_Symbol,chr=Chromosome,start=Start_Position,end=End_Position,
                     ref=Reference_Allele,t_allele1=Tumor_Seq_Allele1,t_allele2=Tumor_Seq_Allele2,
@@ -151,7 +165,10 @@ norm_maf_all_cont = read_tsv("/Volumes/areca42TB/tcga/all_patient/control_region
   filter(Consequence!="intron_variant,non_coding_transcript_variant") %>>%
   left_join(patient_list) %>>%
   filter(gene_symbol != "GDF2", gene_symbol != "GPRIN2", gene_symbol != "DEFB110") %>>%
-  mutate(LOH=ifelse((soma_or_germ == "somatic" & LOH =="no" & ref != n_allele2),"back_mutation",LOH))
+  filter(gene_symbol != "MRC1", gene_symbol != "CCDC168")%>>% #ExACでMAF==0なのにtcgaではいっぱいなsiteが多数
+  mutate(LOH=ifelse((soma_or_germ == "somatic" & LOH =="no" & ref != n_allele2),"back_mutation",LOH))%>>%
+  dplyr::select(-cancer_type,-age,-gender) %>>%left_join(patient_list)%>>%
+  filter(!is.na(cancer_type))
 
 ######  coverage file
 coverage_all_by_cancer_type_cont =
@@ -178,7 +195,8 @@ tally_norm_maf_cont = norm_maf_all_cont %>>%
   group_by(chr,start,end,ref,alt) %>>%
   summarise(ac_cancer=n(),hom_cancer=sum(homo)/2,gene_symbol=first(gene_symbol),
             Consequence=first(Consequence),PolyPhen=first(PolyPhen),mutype=first(mutype),
-            cDNA_position=first(cDNA_position),CDS_position=first(CDS_position)) %>>%
+            cDNA_position=first(cDNA_position),CDS_position=first(CDS_position),
+            Protein_position=first(Protein_position)) %>>%
   ungroup() %>>%
   left_join(coverage_all_cont) %>>%left_join(coverage_male_x_cont) %>>%
   mutate(an_male_cancer = ifelse(is.na(an_male_cancer),0,an_male_cancer)) %>>%
@@ -222,7 +240,30 @@ if(0){
     filter(AC_Adj/AN_Adj > 0.5| AC_AFR/AN_AFR > 0.5| (AC_FIN+AC_NFE)/(AN_FIN+AN_NFE) > 0.5) %>>%
     write_df("/Volumes/areca42TB2/gdc/control_region/all_patient/ref_minor_list.tsv")
 }
-ref_minor_focal_cont = read_tsv("/Volumes/areca42TB2/gdc/control_region/all_patient/ref_minor_coverage_by_patient.tsv.gz")
+ref_minor_focal_cont = 
+  read_tsv("/Volumes/areca42TB2/gdc/control_region/all_patient/ref_minor_coverage_by_patient.tsv.gz")%>>%
+  left_join(patient_list)
+
+#########uk10k
+# vcf_10k_cont=read_tsv("/Volumes/areca42TB/ega/file/all_sample_control_region_likevcf.tsv.gz",
+#                       col_types = "cdccdddd")
+# uk10k_cont=strip_maf("/Volumes/areca42TB/ega/file/all_sample_control.maf") %>>%
+#   left_join(vcf_10k_cont%>>%mutate(start=ifelse(ref=="-",start -1,start)) %>>%
+#               mutate(chr=paste0("chr",chr))) %>>%
+#   left_join(control_genes) %>>%filter(!is.na(focal)) %>>%dplyr::select(-focal) %>>%
+#   dplyr::rename(ac_uk=uk_ac,an_uk=uk_an,hom_uk=uk_althomo,het_uk=uk_hetero) %>>%
+#   filter(an_uk >3000, an_uk <4091,ac_uk>0)
+# rm(vcf_10k_cont)
+# ########1000 genomes
+# vcf_1kg_cont=read_tsv("/working/1000genomes/control_genes/all_sample_control_region_likevcf.tsv.gz",
+#                       col_types = "cdccdddd")
+# tally_1kg_cont=strip_maf("/working/1000genomes/control_genes/all_sample_control.maf") %>>%
+#   left_join(vcf_1kg_cont%>>%mutate(start=ifelse(ref=="-",start -1,start)) %>>%
+#   mutate(chr=paste0("chr",chr))) %>>%
+#   left_join(control_genes) %>>%filter(!is.na(focal)) %>>%dplyr::select(-focal) %>>%
+#   dplyr::rename(ac_1kg=`1kg_ac`,an_1kg=`1kg_an`,hom_1kg=`1kg_althomo`,het_1kg=`1kg_hetero`)%>>%
+#   filter(!str_detect(alt,"<"))
+# rm(vcf_1kg_cont)
 ################################################################################################################
 ################################################################################################################
 ################################################ quality filter ################################################
@@ -256,7 +297,8 @@ if(0){
                 mutate(FDR_cancer=p.adjust(HWE_cancer)) %>>%filter(FDR_cancer<0.01))
   write_df(duplicate_site_cont,"/Volumes/areca42TB2/gdc/control_region/all_patient/duplicate_site_control.tsv")
 }
-duplicate_site_cont = read_tsv("/Volumes/areca42TB2/gdc/control_region/all_patient/duplicate_site_control.tsv") 
+duplicate_site_cont = 
+  read_tsv("/Volumes/areca42TB2/gdc/control_region/all_patient/duplicate_site_control.tsv") 
 
 ##### somaticでrecurrentなmutationはgermで起こっているとは考えにくい（様々なエラーが考えられる）
 #いちおうEXACでAF>1%となっているsiteはこれに含めない
@@ -308,7 +350,7 @@ quality_filter_cont =
         filter(is.na(varscan_error_focal)) %>>%
         group_by(patient_id,gene_symbol,Protein_position) %>>%
         mutate(same_codon=n()) %>>%
-        filter(same_codon==1 & !str_detect(Protein_position,"-")) %>>%
+        filter(same_codon==1) %>>%
         ungroup() %>>%
         dplyr::select(-varscan_error_focal, -same_codon)
     }else{stop(paste0(".datatype variabel is wrong .datatype=",.type,"\nvcf, maf is correct"))}
@@ -334,6 +376,6 @@ quality_filter_cont =
     filter(if(.somatic==T){is.na(recurrent_focal)}else{chr==chr})%>>%
     dplyr::select(-recurrent_focal,-duplicate_focal)
 }
-#quality_filter_cont(norm_maf_all_cont,.data_type = "maf",.varscan = T)
+#quality_filter_cont(norm_maf_all_cont,.data_type = "maf",.varscan = T)%>>%(?.)
 
 

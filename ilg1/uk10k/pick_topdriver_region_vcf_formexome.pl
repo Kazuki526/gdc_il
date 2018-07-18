@@ -35,7 +35,7 @@ close BED;
 my @ls=`ls allvcf`;chomp @ls;
 #make to liftover bed
 my $chr="";
-=pod
+#=pod
 open(VCF,"gunzip -c allvcf/$ls[0]|") or die "ERROR:cant gunzip-c allvcf/$ls[0]\n";
 print "writing toLiftover bed files\n";
 while(<VCF>){
@@ -52,7 +52,7 @@ while(<VCF>){
 		#each position donot changed chromosome so not print out hg19:chr
 		print OUT "chr$line[0]\t$line[1]\t$end\t$line[1]\n";
 }
-=cut
+#=cut
 
 close VCF;
 my %focal=();

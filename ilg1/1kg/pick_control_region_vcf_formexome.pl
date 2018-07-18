@@ -133,7 +133,7 @@ foreach my $chr(@chr){
 								}
 						}
 						print OUT1 "$line[0]\t$posi\t$line[2]\t$line[3]\t$alt[$t-1]\t$line[5]\t$line[6]\tAC=$ac;AN=$an;Althomo=$aa;hetero=$ra\n";
-						print OUT2 "$line[0]\t$posl\t$ref\t$altl\t$ac\t$an\t$aa\t$ra\n";
+						print OUT2 "$line[0]\t$posl\t$refl\t$altl\t$ac\t$an\t$aa\t$ra\n";
 				}
 		}
 		close VCF;
