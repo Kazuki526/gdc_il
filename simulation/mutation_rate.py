@@ -4,11 +4,16 @@ import random
 import numpy as np
 
 mutater_effect = 10
+mutater_s = 5
+TSGnon_s = 0.5
+TSGsyn_s = 0
+controlnon_s = 0
+controlsyn_s = 0
 # defined parameters
-TSG_nonsyn_site =
-TSG_syn_site =
-control_nonsyn_site =
-control_syn_site =
+TSG_nonsyn_site = 191624
+TSG_syn_site = 61470
+control_nonsyn_site = 923307
+control_syn_site = 319944
 
 
 def new_mutation(mp, site_num):
@@ -60,7 +65,7 @@ class Population:
             fitness_list.append(i.fitness)
         return fitness_list
 
-    def get_munum(self):
+    def append_new_mutation(self):
         muter_pnum = [len([x for x in self.individuals if x.mutater == 0])]
         muter_pnum.append(len([x for x in self.individuals if x.mutater == 1]))
         muter_pnum.append(len([x for x in self.individuals if x.mutater == 2]))
@@ -68,6 +73,18 @@ class Population:
         for i in range(len(new_mut_tn)):
             new_mus = random.choice(TSG_nonsyn_site, new_mut_tn[i])
             self.individuals[i]._tsg_n.append(new_mus)
+        new_mut_ts = new_mutation(muter_pnum, TSG_syn_site)
+        for i in range(len(new_mut_ts)):
+            new_mus = random.choice(TSG_syn_site, new_mut_tn[i])
+            self.individuals[i]._tsg_s.append(new_mus)
+        new_mut_cn = new_mutation(muter_pnum, control_nonsyn_site)
+        for i in range(len(new_mut_cn)):
+            new_mus = random.choice(control_nonsyn_site, new_mut_cn[i])
+            self.individuals[i]._control_n.append(new_mus)
+        new_mut_cs = new_mutation(muter_pnum, control_syn_site)
+        for i in range(len(new_mut_cs)):
+            new_mus = random.choice(control_syn_site, new_mut_cs[i])
+            self.individuals[i]._control_s.append(new_mus)
 
     def next_generation_wf(self, population_N):
         fitnesses = self.get_fitness_list()
