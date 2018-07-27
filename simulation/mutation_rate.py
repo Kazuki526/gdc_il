@@ -3,6 +3,21 @@
 import random
 import numpy as np
 
+mutater_effect = 10
+# defined parameters
+TSG_nonsyn_site =
+TSG_syn_site =
+control_nonsyn_site =
+control_syn_site =
+
+
+def new_mutation(mp, site_num):
+    new_mus = []
+    for x in range(3):
+        mutation_rate = 1.5*(10**-8) * mutater_effect ** x * site_num
+        new_mus.extend(np.random.poisson(mutation_rate, mp[x]).tolist)
+    return new_mus
+
 
 class Individual:
     def __init__(self, mutater=0,
@@ -18,6 +33,10 @@ class Individual:
     def fitness(self):
         return self._fitness
 
+    @property
+    def mutater(self):
+        return self._mutater
+
     # get [mutater, tsg_n, tsg_s, control_n, control_s]
     def mutations(self):
         mutations = [self._mutater, self._tsg_n, self._tsg_s]
@@ -32,8 +51,7 @@ class Individual:
 
 class Population:
     def __init__(self, population_N):
-        self.individuals = Individual(mutater=1)
-        for i in range(1, population_N):
+        for i in range(0, population_N):
             self.individuals.append(Individual())
 
     def get_fitness_list(self):
@@ -42,8 +60,18 @@ class Population:
             fitness_list.append(i.fitness)
         return fitness_list
 
+    def get_munum(self):
+        muter_pnum = [len([x for x in self.individuals if x.mutater == 0])]
+        muter_pnum.append(len([x for x in self.individuals if x.mutater == 1]))
+        muter_pnum.append(len([x for x in self.individuals if x.mutater == 2]))
+        new_mut_tn = new_mutation(muter_pnum, TSG_nonsyn_site)
+        for i in range(len(new_mut_tn)):
+            new_mus = random.choice(TSG_nonsyn_site, new_mut_tn[i])
+            self.individuals[i]._tsg_n.append(new_mus)
+
     def next_generation_wf(self, population_N):
         fitnesses = self.get_fitness_list()
+
         next_generation = []
         for n in range(population_N):
             mutation1 = random.choice(self.individuals,
