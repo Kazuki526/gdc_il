@@ -44,14 +44,15 @@ class Individual:
 
     # get [mutater, tsg_n, tsg_s, control_n, control_s]
     def mutations(self):
-        mutations = [self._mutater, self._tsg_n, self._tsg_s]
+        mutations = [self._tsg_n, self._tsg_s]
         mutations += [self._control_n, self._control_s]
         return(mutations)
 
-    # get haploid mutaion num list
-    def reproduct(self):
-        new_mutations = [np.random.binomial(mu, 0.5) for mu in self.mutations]
-        return(new_mutations)
+
+def reproduct(ind1,ind2):
+    mutater = np.random.binomial(ind1.mutater + ind2.mutater, 0.5)
+    mutater = 2 if mutater > 2 else mutater
+
 
 
 class Population:
