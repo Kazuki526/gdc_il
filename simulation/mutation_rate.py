@@ -8,42 +8,61 @@ import time
 import copy
 
 t1 = time.time()
-# python mutatin_rate.py N time out_file ...
-imput = sys.argv
-if len(imput) < 3:
-    sys.stderr.write("ERROR::imput [N, generation times, out file]!")
-    sys.exit()
-N = int(imput[1])
-generation_times = int(imput[2])
-out_file = imput[3]
-# parameters
-mutater_rate = 10**-6
-mutater_effect = 10
-mutater_s = 5
-TSGnon_s = 0.5
-TSGsyn_s = 0
-controlnon_s = 0
-controlsyn_s = 0
 # defined parameters
 TSG_nonsyn_site = 191624
 TSG_syn_site = 61470
 control_nonsyn_site = 923307
 control_syn_site = 319944
 mean_age = 61.5
-sd_age = 13.5
+age_sd = 13.5
+
+
+# define class of parameters
+class parameter_object:
+    def _init(self, N, generation_times, mutation_rate_coef, mutater_effect,
+              s_exp_mean, selection_coef, TSGnon_s, mutater_s,
+              syn_s=0, controlnon_s=0):
+        self.N = N
+        self.generation_times = generation_times
+        self.mutation_rate = 1.5*(10**-8)*mutation_rate_coef
+        self.mutater_effect = mutater_effect
+        self.s_exp_mean = s_exp_mean
+        self.selection_coef = selection_coef
+        self.TSGnon_s = TSGnon_s
+        self.mutater_s = mutater_s
+        self.syn_s = syn_s
+        self.controlnon_s = controlnon_s
+
+
+def simulation(parameter_obj):
+    tb = copy.copy(t1)
+    cancer_population = Population(parameters)
+    for t in range(parameters.generation_times):
+        cancer_population.add_new_mutation()
+        cancer_population.next_generation_wf(parameters)
+        if t % (parameters.generation_times/100) == 0:
+            print("now " + str(t) + " generation")
+            t2 = time.time()
+            elapsed_time = t2 - tb
+            tb = t2
+            print(f"spent: {elapsed_time}")
+
+    # cancer_population.print_individuals(out_file)
+    t2 = time.time()
+    elapsed_time = t2 - t1
+    print(f"all time spent: {elapsed_time}")
 
 
 class Individual:
-    def __init__(self, mutater=0,
-                 tsg_n=[], tsg_s=[], control_n=[], control_s=[]):
+    def __init__(self, mutater, tsg_n, tsg_s, control_n, control_s, params):
         self._mutater = mutater
         self._tsg_n = tsg_n
         self._tsg_s = tsg_s
         self._control_n = control_n
         self._control_s = control_s
-        age = 60-mutater*mutater_effect-sum(tsg_n)*TSGnon_s-sum(tsg_s)*TSGsyn_s
-        age -= sum(control_n)*controlnon_s+sum(control_s)*controlsyn_s
-        age += np.random.normal(0, sd_age)
+        age = mean_age
+        age -=
+        age += np.random.normal(0, age_sd)
         age = 100 if age > 100 else age
         age = 0 if age < 0 else age
         self._onset_age = age
@@ -102,8 +121,11 @@ def reproduct(ind1, ind2):
 
 
 class Population:
-    def __init__(self, population_N):
-        self.individuals = [Individual() for i in range(population_N)]
+    def __init__(self, parameters):
+        self.individuals = [Individual(mutater=0, tsg_n=[], tsg_s=[],
+                                       control_n=[], control_s=[],
+                                       params=parameters)
+                            for i in range(parameters.N)]
 
     def get_fitness_list(self):
         fitness_list = [ind.fitness for ind in self.individuals]
@@ -112,12 +134,14 @@ class Population:
         return fitness_list
     # add new mutations to each individuals
 
-    def add_new_mutation(self):
+    def add_new_mutation(self, parameters):
+        # individuals num of [mutater=0, mutater=1, mutater=2]
         muter_pnum = [len([x for x in self.individuals if x.mutater == 0])]
         muter_pnum.append(len([x for x in self.individuals if x.mutater == 1]))
         muter_pnum.append(len([x for x in self.individuals if x.mutater == 2]))
-        all_n = len(self.individuals)
-        new_mutater = np.random.binomial(1, mutater_rate, all_n).tolist()
+        mutater_mut_rate = parameters.mutation_rate*parameters.mutater_length
+        new_mutater = np.random.binomial(1, mutater_mut_rate,
+                                         parameters.N).tolist()
         new_mut_tn = new_mutation(muter_pnum, TSG_nonsyn_site)
         new_mut_ts = new_mutation(muter_pnum, TSG_syn_site)
         new_mut_cn = new_mutation(muter_pnum, control_nonsyn_site)
@@ -161,21 +185,3 @@ class Population:
                 info = [ind.mutater, *mut]
                 info += [ind.onset_age, ind.fitness]
                 out.writerow([row_n, *info])
-
-
-tb = copy.copy(t1)
-cancer_population = Population(N)
-for t in range(generation_times):
-    cancer_population.add_new_mutation()
-    cancer_population.next_generation_wf(N)
-    if t % (generation_times/100) == 0:
-        print("now " + str(t) + " generation")
-        t2 = time.time()
-        elapsed_time = t2 - tb
-        tb = t2
-        print(f"spent: {elapsed_time}")
-
-cancer_population.print_individuals(out_file)
-t2 = time.time()
-elapsed_time = t2 - t1
-print(f"all time spent: {elapsed_time}")
