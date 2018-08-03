@@ -5,6 +5,7 @@ import numpy as np
 import sys
 import time
 import copy
+from sklearn import linear_model
 
 t1 = time.time()
 # defined parameters
@@ -18,11 +19,9 @@ age_sd = 13.5
 
 # define class of parameters
 class parameter_object:
-    def _init(self, N, generation_times, mutation_rate_coef, mutater_effect,
-              s_exp_mean, selection_coef, tsgnon_s, mutater_s,
-              syn_s=0, contnon_s=0):
+    def _init(self, N, mutation_rate_coef, mutater_effect, s_exp_mean,
+              selection_coef, tsgnon_s, mutater_s, syn_s=0, contnon_s=0):
         self.N = N
-        self.generation_times = generation_times
         self.mutation_rate = 1.5*(10**-8)*mutation_rate_coef
         self.mutater_effect = mutater_effect
         tsgnon_s = np.rondom.exponential(s_exp_mean, tsg_non_site).tolist()
@@ -39,25 +38,6 @@ class parameter_object:
         self.contsyn_s = [syn_s * round(s, 4) for s in contsyn_s]
         self.selection_coef = selection_coef
         self.mutater_s = mutater_s
-
-
-def simulation(parameter_obj):
-    tb = copy.copy(t1)
-    cancer_population = Population(parameters=parameter_obj)
-    tn = 0
-    for t in range(parameter_obj.generation_times):
-        cancer_population.add_new_mutation()
-        cancer_population.next_generation_wf(parameter_obj)
-        tn = t
-        if t % 100 == 0:
-            t2 = time.time()
-            elapsed_time = t2 - tb
-            print(f"now {t} generation done, spent: {elapsed_time}")
-            tb = t2
-    # cancer_population.print_individuals(out_file)
-    t2 = time.time()
-    elapsed_time = t2 - t1
-    print(f"finish! {tn} generation: {elapsed_time}")
 
 
 def genotype_divide(mutations):
@@ -97,16 +77,16 @@ class Individual:
     def onset_age(self):
         return self._onset_age
 
-    # get [tsg_n_het, tsg_s_het, cont_n_het, cont_s_het]
+    # get [tsg_non_het, tsg_syn_het, cont_non_het, cont_syn_het]
     def mutations(self):
-        mutations = copy.deepcopy([self._tsg_n_het, self._tsg_s_het])
-        mutations += copy.deepcopy([self._cont_n_het, self._cont_s_het])
+        mutations = copy.deepcopy([self._tsg_non_het, self._tsg_syn_het])
+        mutations += copy.deepcopy([self._cont_non_het, self._cont_syn_het])
         return(mutations)
 
-    # get [tsg_n_homo, tsg_s_homo, cont_n_homo, cont_n_homo]
+    # get [tsg_non_homo, tsg_syn_homo, cont_non_homo, cont_syn_homo]
     def homo_mutations(self):
-        mutations = copy.deepcopy([self._tsg_n_hom, self._tsg_s_hom])
-        mutations += copy.deepcopy([self._cont_n_hom, self._cont_s_hom])
+        mutations = copy.deepcopy([self._tsg_non_hom, self._tsg_syn_hom])
+        mutations += copy.deepcopy([self._cont_non_hom, self._cont_syn_hom])
         return(mutations)
 
     def add_tsg_non(self, muts):
@@ -136,12 +116,32 @@ class Individual:
     def add_mutater(self, add_or_not):
         self._mutater = copy.copy(self._mutater) + add_or_not
 
+    def variant_num_tsg_non(self, variant_list):
+        num = len(set(self._tsg_non_het) & set(variant_list))
+        num += len(set(self._tsg_non_hom) & set(variant_list)) * 2
+        return(num)
+
+    def variant_num_tsg_syn(self, variant_list):
+        num = len(set(self._tsg_syn_het) & set(variant_list))
+        num += len(set(self._tsg_syn_hom) & set(variant_list)) * 2
+        return(num)
+
+    def variant_num_cont_non(self, variant_list):
+        num = len(set(self._cont_non_het) & set(variant_list))
+        num += len(set(self._cont_non_hom) & set(variant_list)) * 2
+        return(num)
+
+    def variant_num_cont_syn(self, variant_list):
+        num = len(set(self._cont_syn_het) & set(variant_list))
+        num += len(set(self._cont_syn_hom) & set(variant_list)) * 2
+        return(num)
+
 
 # make de nove mutations list (list of each ind de novo mutation num)
-def new_mutation(mp, site_num, parameters):
+def new_mutation(mp, site_num, params):
     new_mus = []
     for x in range(3):
-        mutation_rate = parameters.mutation_rate * site_num
+        mutation_rate = params.mutation_rate * site_num
         new_mus.extend(np.random.poisson(mutation_rate, mp[x]).tolist())
     return new_mus
 
@@ -211,11 +211,11 @@ class Population:
         self.individuals = next_generation
         self.individuals.sort(key=lambda ind: ind.mutater)
 
-    def print_summary(self, params):
+    def variant_count(self):
         v_count = [[0 for i in range(tsg_non_site)]]
-        v_count += [0 for i in range(tsg_syn_site)]
-        v_count += [0 for i in range(cont_non_site)]
-        v_count += [0 for i in range(cont_syn_site)]
+        v_count += [[0 for i in range(tsg_syn_site)]]
+        v_count += [[0 for i in range(cont_non_site)]]
+        v_count += [[0 for i in range(cont_syn_site)]]
         for ind in self.individuals:
             het_muts = self.mutations
             hom_muts = self.homo_mutations
@@ -224,9 +224,79 @@ class Population:
                     v_count[i][het_mut] += 1
                 for hom_mut in hom_muts:
                     v_count[i][hom_mut] += 2
+        return(v_count)
+
+    def print_rare_variant_num(self, params):
+        v_count = self.variant_count()
+        rare_nums = [0, 0, 0, 0]
+        for i in range(4):
+            rare_nums[i] = sum([v_num for v_num in v_count[i]
+                                if v_count[i][v_num] < params.N*2*0.0005])
+        return(rare_nums)
+
+    def print_summary(self, params, sample_num=6000):
+        v_count = self.variant_count()
         rare_variants = [[], [], [], []]
         rare_nums = []
         for i in range(4):
             rare_variants[i] = [v for v in range(len(v_count[i]))
                                 if v_count[i][v] < params.N*2*0.0005]
-            rare_nums[i] = sum([v_count[i][v] for v in rare_variants[i]])
+            rare_nums += [sum([v_count[i][v] for v in rare_variants[i]])]
+        sample = random.sample(self.individuals, sample_num)
+        sample_age = [ind.onset_age for ind in sample]
+        sample_tn_num = [ind.variant_num_tsg_non(v_count[1])
+                         for ind in sample]
+        sample_ts_num = [ind.variant_num_tsg_syn(v_count[2])
+                         for ind in sample]
+        sample_cn_num = [ind.variant_num_cont_non(v_count[3])
+                         for ind in sample]
+        sample_cs_num = [ind.variant_num_cont_syn(v_count[4])
+                         for ind in sample]
+        sample_age = np.arrray(sample_age).reshape(-1, 1)
+        sample_tn_num = np.array(sample_tn_num).reshape(-1, 1)
+        sample_ts_num = np.array(sample_ts_num).reshape(-1, 1)
+        sample_cn_num = np.array(sample_cn_num).reshape(-1, 1)
+        sample_cs_num = np.array(sample_cs_num).reshape(-1, 1)
+        tsg_non_reg = linear_model.LinearRegression()
+        tsg_non_reg.fit(sample_age, sample_tn_num)
+        tsg_syn_reg = linear_model.LinearRegression()
+        tsg_syn_reg.fit(sample_age, sample_ts_num)
+        cont_non_reg = linear_model.LinearRegression()
+        cont_non_reg.fit(sample_age, sample_cn_num)
+        cont_syn_reg = linear_model.LinearRegression()
+        cont_syn_reg.fit(sample_age, sample_cs_num)
+        return([rare_nums,
+                [tsg_non_reg, tsg_syn_reg, cont_non_reg, cont_syn_reg]])
+
+
+def simulation(parameter_obj):
+    tb = copy.copy(t1)
+    cancer_population = Population(parameters=parameter_obj)
+    tn = 0
+    for t in range(parameter_obj.generation_times):
+        cancer_population.add_new_mutation()
+        cancer_population.next_generation_wf(parameter_obj)
+        tn = t
+        if t % 100 == 0:
+            t2 = time.time()
+            elapsed_time = t2 - tb
+            print(f"now {t} generation done, spent: {elapsed_time}")
+            tb = t2
+    # cancer_population.print_individuals(out_file)
+    t2 = time.time()
+    elapsed_time = t2 - t1
+    print(f"finish! {tn} generation: {elapsed_time}")
+
+
+def simulation(parameter_obj):
+    population = Population(params=parameter_obj)
+    focal = True
+    v_num_list = []
+    generation = 0
+    while focal:
+        generation += 1
+        population.add_new_mutation(parameter_obj)
+        population.next_generation_wf(parameter_obj)
+        if generation & 10 == 0:
+            v_nums = population.print_rare_variant_num()
+            
