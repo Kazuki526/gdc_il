@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 import random
 import numpy as np
-import csv
 import sys
 import time
 import copy
@@ -28,16 +27,16 @@ class parameter_object:
         self.mutater_effect = mutater_effect
         tsgnon_s = np.rondom.exponential(s_exp_mean, tsg_non_site).tolist()
         tsgnon_s = [1 if s > 1 else s for s in tsgnon_s]
-        self.tsgnon_s = [tsgnon_s * round(exp, 4) for exp in tsgnon_s]
+        self.tsgnon_s = [tsgnon_s * round(s, 4) for s in tsgnon_s]
         tsgsyn_s = np.rondom.exponential(s_exp_mean, tsg_syn_site).tolist()
         tsgnon_s = [1 if s > 1 else s for s in tsgnon_s]
-        self.tsgsyn_s = [syn_s * round(exp, 4) for exp in tsgsyn_s]
+        self.tsgsyn_s = [syn_s * round(s, 4) for s in tsgsyn_s]
         contnon_s = np.rondom.exponential(s_exp_mean, cont_non_site).tolist()
         contnon_s = [1 if s > 1 else s for s in contnon_s]
-        self.contnon_s = [contnon_s * round(exp, 4) for exp in contnon_s]
+        self.contnon_s = [contnon_s * round(s, 4) for s in contnon_s]
         contsyn_s = np.rondom.exponential(s_exp_mean, cont_syn_site).tolist()
         contnon_s = [1 if s > 1 else s for s in contnon_s]
-        self.contsyn_s = [syn_s * round(exp, 4) for exp in contsyn_s]
+        self.contsyn_s = [syn_s * round(s, 4) for s in contsyn_s]
         self.selection_coef = selection_coef
         self.mutater_s = mutater_s
 
@@ -45,9 +44,11 @@ class parameter_object:
 def simulation(parameter_obj):
     tb = copy.copy(t1)
     cancer_population = Population(parameters=parameter_obj)
+    tn = 0
     for t in range(parameter_obj.generation_times):
         cancer_population.add_new_mutation()
         cancer_population.next_generation_wf(parameter_obj)
+        tn = t
         if t % 100 == 0:
             t2 = time.time()
             elapsed_time = t2 - tb
@@ -56,7 +57,7 @@ def simulation(parameter_obj):
     # cancer_population.print_individuals(out_file)
     t2 = time.time()
     elapsed_time = t2 - t1
-    print(f"all time spent: {elapsed_time}")
+    print(f"finish! {tn} generation: {elapsed_time}")
 
 
 def genotype_divide(mutations):
@@ -80,9 +81,9 @@ class Individual:
         age -= sum([parameters.contsyn_s[mut] for mut in cont_syn])
         age += np.random.normal(0, age_sd)
         age = 100 if age > 100 else age
-        age = 20 if age < 20 else age
+        age = 0 if age < 0 else age
         self._onset_age = age
-        self._fitness = age / mean_age
+        self._fitness = 1 - (1 - age / mean_age) * parameters.selection_coef
 
     @property
     def fitness(self):
@@ -159,7 +160,7 @@ class Population:
     def __init__(self, params):
         self.individuals = [Individual(mutater=0, tsg_non=[], tsg_syn=[],
                                        cont_non=[], control_syn=[],
-                                       parametes=params)
+                                       parameters=params)
                             for i in range(params.N)]
 
     def get_fitness_list(self):
@@ -210,16 +211,22 @@ class Population:
         self.individuals = next_generation
         self.individuals.sort(key=lambda ind: ind.mutater)
 
-    def print_individuals(self, file):
-        with open(file, "w") as f:
-            out = csv.writer(f, delimiter="\t")
-            col = ["id", "mutater", "TSG_nonsyn", "TSG_syn"]
-            col += ["control_nonsyn", "control_syn", "onset_age"]
-            col += ["fitness"]
-            out.writerow(col)
-            for row_n in range(len(self.individuals)):
-                ind = self.individuals[row_n]
-                mut = [len(muts) for muts in ind.mutations()]
-                info = [ind.mutater, *mut]
-                info += [ind.onset_age, ind.fitness]
-                out.writerow([row_n, *info])
+    def print_summary(self, params):
+        v_count = [[0 for i in range(tsg_non_site)]]
+        v_count += [0 for i in range(tsg_syn_site)]
+        v_count += [0 for i in range(cont_non_site)]
+        v_count += [0 for i in range(cont_syn_site)]
+        for ind in self.individuals:
+            het_muts = self.mutations
+            hom_muts = self.homo_mutations
+            for i in range(4):
+                for het_mut in het_muts:
+                    v_count[i][het_mut] += 1
+                for hom_mut in hom_muts:
+                    v_count[i][hom_mut] += 2
+        rare_variants = [[], [], [], []]
+        rare_nums = []
+        for i in range(4):
+            rare_variants[i] = [v for v in range(len(v_count[i]))
+                                if v_count[i][v] < params.N*2*0.0005]
+            rare_nums[i] = sum([v_count[i][v] for v in rare_variants[i]])
