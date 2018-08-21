@@ -4,6 +4,7 @@ import random
 import numpy as np
 import time
 import copy
+import csv
 from sklearn import linear_model
 
 t1 = time.time()
@@ -18,24 +19,21 @@ age_sd = 13.5
 
 # define class of parameters
 class parameter_object:
-    def __init__(self, N, mutation_rate_coef, mutater_effect, s_exp_mean,
-                 selection_coef, tsgnon_s, mutater_s, syn_s=0, contnon_s=0,
-                 mutater_length=10000):
+    def __init__(self, N, mutation_rate_coef, mutater_effect, mutater_damage,
+                 tsg_non_damage, cont_non_damage, fitness_coef,
+                 cancer_prob_coef, syn_damage=0, mutater_length=10000):
         self.N = N
         self.mutation_rate = 1.5*(10**-8)*mutation_rate_coef
         self.mutater_effect = mutater_effect
         self.mutater_length = mutater_length
-        tsgnon_s_l = np.random.exponential(s_exp_mean, tsg_non_site).tolist()
-        tsgnon_s_l = [1 if s > 1 else s for s in tsgnon_s_l]
-        self.tsgnon_s = [round(tsgnon_s * s, 4) for s in tsgnon_s_l]
-        tsgsyn_s_l = np.random.exponential(s_exp_mean, tsg_syn_site).tolist()
-        tsgsyn_s_l = [1 if s > 1 else s for s in tsgsyn_s_l]
-        self.tsgsyn_s = [round(syn_s * s, 4) for s in tsgsyn_s_l]
-        contnon_s_l = np.random.exponential(s_exp_mean, cont_non_site).tolist()
-        contnon_s_l = [1 if s > 1 else s for s in contnon_s_l]
-        self.contnon_s = [round(contnon_s * s, 4) for s in contnon_s_l]
-        self.selection_coef = selection_coef
-        self.mutater_s = mutater_s
+        tsgnon_d_list = np.random.exponential(tsg_non_damage, tsg_non_site)
+        self.tsgnon_d = tsgnon_d_list.tolist()
+        contnon_d_list = np.random.exponential(cont_non_damage, cont_non_site)
+        self.contnon_d = contnon_d_list.tolist()
+        syn_d_list = np.random.exponential(syn_damage, tsg_syn_site)
+        self.syn_d = syn_d_list.tolist()
+        self.fitness_coef = fitness_coef
+        self.cancer_prob_coef = cancer_prob_coef
 
 
 def genotype_divide(mutations):
@@ -50,28 +48,18 @@ class Individual:
         self._tsg_non_hom, self._tsg_non_het = genotype_divide(tsg_non)
         self._tsg_syn_hom, self._tsg_syn_het = genotype_divide(tsg_syn)
         self._cont_non_hom, self._cont_non_het = genotype_divide(cont_non)
-        age = mean_age
-        age -= sum([parameters.tsgnon_s[mut] for mut in tsg_non])
-        age -= sum([parameters.tsgsyn_s[mut] for mut in tsg_syn])
-        age += np.random.normal(0, age_sd)
-        age = 100 if age > 100 else age
-        age = 0 if age < 0 else age
-        self._onset_age = age
-        age -= sum([parameters.contnon_s[mut] for mut in cont_non])
-        age = 0 if age < 0 else age
-        self._fitness = 1 - (1 - age / mean_age) * parameters.selection_coef
-
-    @property
-    def fitness(self):
-        return self._fitness
+        damage = sum([parameters.tsgnon_d[mut] for mut in tsg_non])
+        damage += sum([parameters.syn_d[mut] for mut in tsg_syn])
+        damage += sum([parameters.contnon_d[mut] for mut in cont_non])
+        self._damage = damage
 
     @property
     def mutater(self):
         return self._mutater
 
     @property
-    def onset_age(self):
-        return self._onset_age
+    def damage(self):
+        return self._damage
 
     # get [tsg_non_het, tsg_syn_het, cont_non_het, cont_syn_het]
     def mutations(self):
@@ -125,11 +113,22 @@ class Individual:
 
 
 # make de nove mutations list (list of each ind de novo mutation num)
-def new_mutation(mp, site_num, params):
+def new_mutation(mutater_num, site_num, params):
+    mutation_rate = params.mutation_rate * site_num
+    mutater = params.mutater_effect
+    mut0 = np.random.poisson(mutation_rate, mutater_num.count(0)).tolist()
+    mut1 = np.random.poisson(mutation_rate * mutater,
+                             mutater_num.count(1)).tolist()
+    mut2 = np.random.poisson(mutation_rate * (mutater**2),
+                             mutater_num.count(2)).tolist()
     new_mus = []
-    for x in range(3):
-        mutation_rate = params.mutation_rate * site_num
-        new_mus.extend(np.random.poisson(mutation_rate, mp[x]).tolist())
+    for i in range(params.N):
+        if mutater_num[i] == 0:
+            new_mus.append(mut0.pop())
+        elif mutater_num[i] == 1:
+            new_mus.append(mut1.pop())
+        else:
+            new_mus.append(mut2.pop())
     return new_mus
 
 
@@ -149,24 +148,34 @@ class Population:
                                        cont_non=[], parameters=params)
                             for i in range(params.N)]
 
-    def get_fitness_list(self):
-        fitness_list = [ind.fitness for ind in self.individuals]
-        fit_sum = sum(fitness_list)
-        fitness_list = [fit / fit_sum for fit in fitness_list]
+    def get_fitness_list(self, params):
+        damage_list = [ind.damage for ind in self.individuals]
+        fitness_list = [1 - d * params.fitness_coef for d in damage_list]
+        fitness_list = [0 if f < 0 else f for f in fitness_list]
+        fitness_list = [fit / sum(fitness_list) for fit in fitness_list]
         return fitness_list
+
+    def get_cancer_prob(self, params):
+        damage_list = [ind.damage for ind in self.individuals]
+        prob_list = [1 + d * params.cancer_prob_coef for d in damage_list]
+        prob_list = [0 if p < 0 else p for p in prob_list]
+        prob_list = [prob / sum(prob_list) for prob in prob_list]
+        return prob_list
+
+    def get_mutater(self):
+        mutater_list = [ind.mutater for ind in self.individuals]
+        return(mutater_list)
 
     # add new mutations to each individuals
     def add_new_mutation(self, params):
         # individuals num of [mutater=0, mutater=1, mutater=2]
-        muter_pnum = [len([x for x in self.individuals if x.mutater == 0])]
-        muter_pnum.append(len([x for x in self.individuals if x.mutater == 1]))
-        muter_pnum.append(len([x for x in self.individuals if x.mutater == 2]))
+        mutater_num = self.get_mutater()
         mutater_mut_rate = params.mutation_rate*params.mutater_length
         new_mutater = np.random.binomial(1, mutater_mut_rate,
                                          params.N).tolist()
-        new_mut_tn = new_mutation(muter_pnum, tsg_non_site, params)
-        new_mut_ts = new_mutation(muter_pnum, tsg_syn_site, params)
-        new_mut_cn = new_mutation(muter_pnum, cont_non_site, params)
+        new_mut_tn = new_mutation(mutater_num, tsg_non_site, params)
+        new_mut_ts = new_mutation(mutater_num, tsg_syn_site, params)
+        new_mut_cn = new_mutation(mutater_num, cont_non_site, params)
         for n in range(params.N):
             if self.individuals[n].mutater < 2:
                 self.individuals[n].add_mutater(new_mutater[n])
@@ -185,12 +194,11 @@ class Population:
 
     # make next generation population
     def next_generation_wf(self, params):
-        fitness = self.get_fitness_list()
+        fitness = self.get_fitness_list(params=params)
         rand_ind = np.random.choice(self.individuals, params.N*2, p=fitness)
         next_generation = [reproduct(rand_ind[n], rand_ind[n+1], params)
                            for n in range(0, params.N*2, 2)]
         self.individuals = next_generation
-        self.individuals.sort(key=lambda ind: ind.mutater)
 
     def variant_allelecount(self):
         v_AC = [[0 for i in range(tsg_non_site)]]
@@ -223,13 +231,15 @@ class Population:
             rare_variants[i] = [v for v in range(len(v_AC[i]))
                                 if v_AC[i][v] < params.N*2*0.0005]
             rare_nums += [sum([v_AC[i][v] for v in rare_variants[i]])]
-        sample = random.sample(self.individuals, sample_num)
+        cancer_prob = self.get_cancer_prob()
+        sample = np.random.choice(self.individuals, sample_num,
+                                  p=cancer_prob, replace=False).tolist()
         sample_age = [ind.onset_age for ind in sample]
-        sample_tn_num = [ind.variant_num_tsg_non(v_AC[0])
+        sample_tn_num = [ind.variant_num_tsg_non(rare_variants[0])
                          for ind in sample]
-        sample_ts_num = [ind.variant_num_tsg_syn(v_AC[1])
+        sample_ts_num = [ind.variant_num_tsg_syn(rare_variants[1])
                          for ind in sample]
-        sample_cn_num = [ind.variant_num_cont_non(v_AC[2])
+        sample_cn_num = [ind.variant_num_cont_non(rare_variants[2])
                          for ind in sample]
         sample_age = np.array(sample_age).reshape(-1, 1)
         sample_tn_num = np.array(sample_tn_num).reshape(-1, 1)
@@ -290,13 +300,29 @@ def simulation(parameter_obj):
     print(f"all time spent {elapsed_time}")
 
 
-test_parameters = parameter_object(N=2000,
-                                   mutation_rate_coef=100,
-                                   mutater_effect=10,
-                                   s_exp_mean=0.5,
-                                   selection_coef=0.5,
-                                   tsgnon_s=5,
-                                   contnon_s=1,
-                                   mutater_s=5)
+def test_simulation(parameter_obj, times=100):
+    file = "test_equilibrium.tsv"
+    with open(file, "w") as f:
+        out = csv.writer(f, delimiter="\t")
+        col = ["generation", "tsg_non", "tsg_syn", "cont_non"]
+        out.writerow(col)
+        population = Population(params=parameter_obj)
+        for generation in range(times):
+            population.add_new_mutation(parameter_obj)
+            population.next_generation_wf(parameter_obj)
+            v_nums = population.print_rare_variant_num(parameter_obj)
+            out.writerow([generation, *v_nums])
+            if generation % 100 == 0:
+                print(f"now {generation} generation")
 
-simulation(test_parameters)
+
+test_parameters = parameter_object(N=10000,
+                                   mutation_rate_coef=20,
+                                   mutater_effect=10,
+                                   mutater_damage=1,
+                                   tsg_non_damage=2,
+                                   cont_non_damage=0.1,
+                                   fitness_coef=0.01,
+                                   cancer_prob_coef=0.001)
+
+test_simulation(test_parameters)
