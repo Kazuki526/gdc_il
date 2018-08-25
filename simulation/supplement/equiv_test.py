@@ -281,7 +281,7 @@ class Population:
                float(cont_non_reg.coef_))
 
 
-def simulation(parameter_obj):
+def simulation(parameter_obj, times):
     t1 = time.time()
     population = Population(params=parameter_obj)
     focal = True
@@ -289,34 +289,36 @@ def simulation(parameter_obj):
     tsgsyn_v_num = []
     contnon_v_num = []
     generation = 0
-    while focal:
-        generation += 1
-        population.add_new_mutation(parameter_obj)
-        population.next_generation_wf(parameter_obj)
-        v_nums = population.print_rare_variant_num(parameter_obj)
-        if generation <= 100:
-            tsgnon_v_num.append(v_nums[0])
-            tsgsyn_v_num.append(v_nums[1])
-            contnon_v_num.append(v_nums[2])
-        else:
-            del tsgnon_v_num[0]
-            del tsgsyn_v_num[0]
-            del contnon_v_num[0]
-            tsgnon_v_num.append(v_nums[0])
-            tsgsyn_v_num.append(v_nums[1])
-            contnon_v_num.append(v_nums[2])
-            tn = stdev(tsgnon_v_num)/mean(tsgnon_v_num)
-            ts = stdev(tsgsyn_v_num)/mean(tsgsyn_v_num)
-            cn = stdev(contnon_v_num)/mean(contnon_v_num)
-            if (tn < 0.05 and ts < 0.05 and cn < 0.05) or generation > 500:
-                focal = False
-        # if generation % 10 == 0:
-        #     t2 = time.time()
-        #     elapsed_time = t2 - t1
-        #     muter = population.get_mutater()
-        #     muter_num = [muter.count(0), muter.count(1), muter.count(2)]
-        #     print(f"now {generation} : {elapsed_time} sec:")
-        #     print(v_nums, muter_num)
+    with open(f"equiv{times}.tsv", "w", 1) as out:
+        while focal:
+            generation += 1
+            population.add_new_mutation(parameter_obj)
+            population.next_generation_wf(parameter_obj)
+            v_nums = population.print_rare_variant_num(parameter_obj)
+            print(generation, *v_nums, sep="\t", file=out)
+            if generation <= 100:
+                tsgnon_v_num.append(v_nums[0])
+                tsgsyn_v_num.append(v_nums[1])
+                contnon_v_num.append(v_nums[2])
+            else:
+                del tsgnon_v_num[0]
+                del tsgsyn_v_num[0]
+                del contnon_v_num[0]
+                tsgnon_v_num.append(v_nums[0])
+                tsgsyn_v_num.append(v_nums[1])
+                contnon_v_num.append(v_nums[2])
+                tn = stdev(tsgnon_v_num)/mean(tsgnon_v_num)
+                ts = stdev(tsgsyn_v_num)/mean(tsgsyn_v_num)
+                cn = stdev(contnon_v_num)/mean(contnon_v_num)
+                if (tn < 0.05 and ts < 0.05 and cn < 0.05) or generation > 500:
+                    focal = False
+            # if generation % 10 == 0:
+            #     t2 = time.time()
+            #     elapsed_time = t2 - t1
+            #     muter = population.get_mutater()
+            #     muter_num = [muter.count(0), muter.count(1), muter.count(2)]
+            #     print(f"now {generation} : {elapsed_time} sec:")
+            #     print(v_nums, muter_num)
     result = population.print_summary(parameter_obj)
     t2 = time.time()
     elapsed_time = t2 - t1
@@ -324,17 +326,6 @@ def simulation(parameter_obj):
     return(result)
 
 
-# test_parameters = parameter_object(N=10000,
-#                                    mutation_rate_coef=10,
-#                                    mutater_effect=50,
-#                                    mutater_mutation_rate=1*(10**-3),
-#                                    mutater_damage=5,
-#                                    tsg_non_damage=1,
-#                                    cont_non_damage=1,
-#                                    cont_non_fitness_only="F",
-#                                    fitness_coef=0.1,
-#                                    cancer_prob_coef=0.001,
-#                                    syn_damage=0)
 def log_rand(min, max):
     log_min = log10(min) if min != 0 else log10(0.000001)
     log_max = log10(max)
