@@ -359,5 +359,5 @@ with open("pre_run.tsv", "w", 1) as f:
     for times in range(100):
         print(f"simulate {times}")
         rand_parameters = rand_params()
-        out = simulation(parameter_object(*rand_parameters))
+        out = simulation(parameter_object(*rand_parameters), times)
         print(*rand_parameters, *out, sep='\t', file=f)
