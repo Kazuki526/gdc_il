@@ -4,34 +4,44 @@ import random
 import numpy as np
 import time
 import copy
-import csv
 from sklearn import linear_model
+from statistics import mean, stdev
+from math import log10
 
-t1 = time.time()
 # defined parameters
 tsg_non_site = 191624
 tsg_syn_site = 61470
 cont_non_site = 923307
 cont_syn_site = 319944
-mean_age = 61.5
+mean_onset_age = 61.5
 age_sd = 13.5
 
 
 # define class of parameters
 class parameter_object:
-    def __init__(self, N, mutation_rate_coef, mutater_effect, mutater_damage,
-                 tsg_non_damage, cont_non_damage, fitness_coef,
-                 cancer_prob_coef, syn_damage=0, mutater_length=10000):
+    def __init__(self,
+                 N,
+                 mutation_rate_coef,
+                 mutater_effect,
+                 mutater_mutation_rate,
+                 mutater_damage,
+                 tsg_non_damage,
+                 cont_non_damage,
+                 cont_non_fitness_only,
+                 fitness_coef,
+                 cancer_prob_coef,
+                 syn_damage=0):
         self.N = N
-        self.mutation_rate = 1.5*(10**-8)*mutation_rate_coef
+        self.mutation_rate = 1*(10**-8)*mutation_rate_coef
         self.mutater_effect = mutater_effect
-        self.mutater_length = mutater_length
+        self.mutater_mutation_rate = mutater_mutation_rate
         tsgnon_d_list = np.random.exponential(tsg_non_damage, tsg_non_site)
         self.tsgnon_d = tsgnon_d_list.tolist()
         contnon_d_list = np.random.exponential(cont_non_damage, cont_non_site)
         self.contnon_d = contnon_d_list.tolist()
         syn_d_list = np.random.exponential(syn_damage, tsg_syn_site)
         self.syn_d = syn_d_list.tolist()
+        self.cont_non_fitness_only = cont_non_fitness_only
         self.fitness_coef = fitness_coef
         self.cancer_prob_coef = cancer_prob_coef
 
@@ -50,8 +60,14 @@ class Individual:
         self._cont_non_hom, self._cont_non_het = genotype_divide(cont_non)
         damage = sum([parameters.tsgnon_d[mut] for mut in tsg_non])
         damage += sum([parameters.syn_d[mut] for mut in tsg_syn])
-        damage += sum([parameters.contnon_d[mut] for mut in cont_non])
+        if parameters.cont_non_fitness_only == "T":
+            damage += sum([parameters.contnon_d[mut] for mut in cont_non])
         self._damage = damage
+        fitness = 1 - damage * parameters.fitness_coef
+        if parameters.cont_non_fitness_only == "F":
+            cn_dam = sum([parameters.contnon_d[mut] for mut in cont_non])
+            fitness -= cn_dam * parameters.fitness_coef
+        self._fitness = 0 if fitness < 0 else fitness
 
     @property
     def mutater(self):
@@ -60,6 +76,10 @@ class Individual:
     @property
     def damage(self):
         return self._damage
+
+    @property
+    def fitness(self):
+        return self._fitness
 
     # get [tsg_non_het, tsg_syn_het, cont_non_het, cont_syn_het]
     def mutations(self):
@@ -93,8 +113,14 @@ class Individual:
         self._cont_non_hom = list(old_hom ^ set(muts))
         self._cont_non_hom += list(old_het & set(muts))
 
-    def add_mutater(self, add_or_not):
-        self._mutater = copy.copy(self._mutater) + add_or_not
+    def add_mutater(self, add_num):
+        bef = copy.copy(self._mutater)
+        if bef+add_num != 2:
+            self._mutater = (bef+add_num) % 2
+        elif bef == 1 and add_num == 1:
+            self._mutater = np.random.randint(2)
+        else:
+            self.mutater = 2
 
     def variant_num_tsg_non(self, variant_list):
         num = len(set(self._tsg_non_het) & set(variant_list))
@@ -115,11 +141,11 @@ class Individual:
 # make de nove mutations list (list of each ind de novo mutation num)
 def new_mutation(mutater_num, site_num, params):
     mutation_rate = params.mutation_rate * site_num
-    mutater = params.mutater_effect
+    mut_ef = params.mutater_effect
     mut0 = np.random.poisson(mutation_rate, mutater_num.count(0)).tolist()
-    mut1 = np.random.poisson(mutation_rate * mutater,
+    mut1 = np.random.poisson(mutation_rate * mut_ef,
                              mutater_num.count(1)).tolist()
-    mut2 = np.random.poisson(mutation_rate * (mutater**2),
+    mut2 = np.random.poisson(mutation_rate * (mut_ef**2),
                              mutater_num.count(2)).tolist()
     new_mus = []
     for i in range(params.N):
@@ -149,10 +175,9 @@ class Population:
                             for i in range(params.N)]
 
     def get_fitness_list(self, params):
-        damage_list = [ind.damage for ind in self.individuals]
-        fitness_list = [1 - d * params.fitness_coef for d in damage_list]
-        fitness_list = [0 if f < 0 else f for f in fitness_list]
-        fitness_list = [fit / sum(fitness_list) for fit in fitness_list]
+        fitness_list = [ind.fitness for ind in self.individuals]
+        fit_sum = sum(fitness_list)
+        fitness_list = [fit / fit_sum for fit in fitness_list]
         return fitness_list
 
     def get_cancer_prob(self, params):
@@ -170,8 +195,7 @@ class Population:
     def add_new_mutation(self, params):
         # individuals num of [mutater=0, mutater=1, mutater=2]
         mutater_num = self.get_mutater()
-        mutater_mut_rate = params.mutation_rate*params.mutater_length
-        new_mutater = np.random.binomial(1, mutater_mut_rate,
+        new_mutater = np.random.binomial(1, params.mutater_mutation_rate,
                                          params.N).tolist()
         new_mut_tn = new_mutation(mutater_num, tsg_non_site, params)
         new_mut_ts = new_mutation(mutater_num, tsg_syn_site, params)
@@ -231,10 +255,11 @@ class Population:
             rare_variants[i] = [v for v in range(len(v_AC[i]))
                                 if v_AC[i][v] < params.N*2*0.0005]
             rare_nums += [sum([v_AC[i][v] for v in rare_variants[i]])]
-        cancer_prob = self.get_cancer_prob()
+        cancer_prob = self.get_cancer_prob(params)
         sample = np.random.choice(self.individuals, sample_num,
                                   p=cancer_prob, replace=False).tolist()
-        sample_age = [ind.onset_age for ind in sample]
+        sample_age = [mean_onset_age-ind.damage for ind in sample]
+        sample_age = [0 if age < 0 else age for age in sample_age]
         sample_tn_num = [ind.variant_num_tsg_non(rare_variants[0])
                          for ind in sample]
         sample_ts_num = [ind.variant_num_tsg_syn(rare_variants[1])
@@ -257,72 +282,91 @@ class Population:
 
 
 def simulation(parameter_obj):
+    t1 = time.time()
     population = Population(params=parameter_obj)
     focal = True
-    v_num_lists = [[], [], []]
+    tsgnon_v_num = []
+    tsgsyn_v_num = []
+    contnon_v_num = []
     generation = 0
-    tb = copy.copy(t1)
     while focal:
         generation += 1
         population.add_new_mutation(parameter_obj)
         population.next_generation_wf(parameter_obj)
+        v_nums = population.print_rare_variant_num(parameter_obj)
+        if generation <= 100:
+            tsgnon_v_num.append(v_nums[0])
+            tsgsyn_v_num.append(v_nums[1])
+            contnon_v_num.append(v_nums[2])
+        else:
+            del tsgnon_v_num[0]
+            del tsgsyn_v_num[0]
+            del contnon_v_num[0]
+            tsgnon_v_num.append(v_nums[0])
+            tsgsyn_v_num.append(v_nums[1])
+            contnon_v_num.append(v_nums[2])
+            tn = stdev(tsgnon_v_num)/mean(tsgnon_v_num)
+            ts = stdev(tsgsyn_v_num)/mean(tsgsyn_v_num)
+            cn = stdev(contnon_v_num)/mean(contnon_v_num)
+            if (tn < 0.05 and ts < 0.05 and cn < 0.05) or generation > 500:
+                focal = False
         if generation % 10 == 0:
-            v_num_lists_sorted = [sorted(v_num_lists[i]) for i in range(3)]
-            v_nums = population.print_rare_variant_num(parameter_obj)
-            if len(v_num_lists[0]) < 10:
-                for i in range(3):
-                    v_num_lists[i].append(v_nums[i])
-                t2 = time.time()
-                elapsed_time = t2 - tb
-                print(f"now {generation} generation, and spent {elapsed_time}")
-                print(v_nums)
-                tb = t2
-            elif (v_num_lists_sorted[0][2] < v_nums[0] and
-                  v_num_lists_sorted[0][7] > v_nums[0] and
-                  v_num_lists_sorted[1][2] < v_nums[1] and
-                  v_num_lists_sorted[1][7] > v_nums[1] and
-                  v_num_lists_sorted[2][2] < v_nums[2] and
-                  v_num_lists_sorted[2][7] > v_nums[2]):
-                    print(f"simulation finish at {generation} generation")
-                    result = population.print_summary(parameter_obj)
-                    print(result)
-                    focal = False
-            else:
-                t2 = time.time()
-                elapsed_time = t2 - tb
-                print(f"now {generation} generation, and spent {elapsed_time}")
-                print(v_nums)
-                for i in range(3):
-                    del v_num_lists[i][0]
-                    v_num_lists[i].append(v_nums[i])
+            t2 = time.time()
+            elapsed_time = t2 - t1
+            muter = population.get_mutater()
+            muter_num = [muter.count(0), muter.count(1), muter.count(2)]
+            print(f"now {generation} : {elapsed_time} sec:")
+            print(v_nums, muter_num)
+    result = population.print_summary(parameter_obj)
     t2 = time.time()
     elapsed_time = t2 - t1
-    print(f"all time spent {elapsed_time}")
+    print(f"all time spent {generation} : {elapsed_time} sec")
+    return(result)
 
 
-def test_simulation(parameter_obj, times=100):
-    file = "test_equilibrium.tsv"
-    with open(file, "w") as f:
-        out = csv.writer(f, delimiter="\t")
-        col = ["generation", "tsg_non", "tsg_syn", "cont_non"]
-        out.writerow(col)
-        population = Population(params=parameter_obj)
-        for generation in range(times):
-            population.add_new_mutation(parameter_obj)
-            population.next_generation_wf(parameter_obj)
-            v_nums = population.print_rare_variant_num(parameter_obj)
-            out.writerow([generation, *v_nums])
-            if generation % 100 == 0:
-                print(f"now {generation} generation")
+# test_parameters = parameter_object(N=10000,
+#                                    mutation_rate_coef=10,
+#                                    mutater_effect=50,
+#                                    mutater_mutation_rate=1*(10**-3),
+#                                    mutater_damage=5,
+#                                    tsg_non_damage=1,
+#                                    cont_non_damage=1,
+#                                    cont_non_fitness_only="F",
+#                                    fitness_coef=0.1,
+#                                    cancer_prob_coef=0.001,
+#                                    syn_damage=0)
+def log_rand(min, max):
+    log_min = log10(min) if min != 0 else log10(0.000001)
+    log_max = log10(max)
+    x = random.uniform(log_min, log_max)
+    x = 10 ** x if x != 0.000001 else 0
+    return(x)
 
 
-test_parameters = parameter_object(N=10000,
-                                   mutation_rate_coef=20,
-                                   mutater_effect=10,
-                                   mutater_damage=1,
-                                   tsg_non_damage=2,
-                                   cont_non_damage=0.1,
-                                   fitness_coef=0.01,
-                                   cancer_prob_coef=0.001)
+def rand_params():
+    rand = random.uniform
+    p_list = [50000,                      # N
+              rand(1, 10),                # mutation_rate_coef
+              rand(5, 50),                # mutation_effect
+              rand(0, 0.01),              # mutater_mutation_rate
+              rand(0, 5),                 # mutater_damage
+              rand(0.1, 2),               # tsg_non_damage
+              rand(0.1, 1),               # cont_non_damage
+              random.choice(["T", "F"]),  # cont_non_fitness_only
+              log_rand(0.001, 0.5),       # fitness_coef
+              log_rand(0, 0.1)]           # cancer_prob_coef
+    return(p_list)
 
-test_simulation(test_parameters)
+
+with open("pre_run.tsv", "w", 1) as f:
+    cols = ["N", "mutation_rate_coef", "mutater_effect", "mutater_damage",
+            "tsg_non_damage", "cont_non_damage", "cont_non_fitness_only",
+            "fitness_coef", "cancer_prob_coef",
+            "tsg_non_num", "tsg_syn_num", "cont_non_num",
+            "tsg_non_reg", "tsg_syn_reg", "cont_non_reg"]
+    print(*cols, sep='\t', file=f)
+    for times in range(100):
+        print(f"simulate {times}")
+        rand_parameters = rand_params()
+        out = simulation(parameter_object(*rand_parameters))
+        print(*rand_parameters, *out, sep='\t', file=f)
