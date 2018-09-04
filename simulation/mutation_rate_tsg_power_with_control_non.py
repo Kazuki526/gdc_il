@@ -346,9 +346,9 @@ def log_rand(min, max):
 def rand_params():
     rand = random.uniform
     p_list = [50000,                      # N
-              rand(1, 10),                # mutation_rate_coef
-              rand(5, 50),                # mutation_effect
-              rand(0, 0.01),              # mutater_mutation_rate
+              rand(0.1, 1),                # mutation_rate_coef
+              rand(5, 100),                # mutation_effect
+              rand(0, 0.001),              # mutater_mutation_rate
               rand(0, 5),                 # mutater_damage
               rand(0.1, 2),               # tsg_non_damage
               rand(0.1, 1),               # cont_non_damage
