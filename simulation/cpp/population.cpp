@@ -1,67 +1,76 @@
-#include<iostream>
-#include<vector>
-#include<random>
-using namespace std;
-const int N = 10;
+#include"individual.hpp"
+#include"population.hpp"
 
-class Individual
-{
-private:
-  int id;
-public:
-  Individual(int i=1){id = i;}
-  void set_id(int i){id = i;}
-  int get_id(){return id;}
-};
-
-class Population : public Individual
-{
-private:
-  Individual individuals[N];
-public:
-  Population();
-  void set_id(int i, int id){individuals[i].set_id(id);}
-  Individual get_ind(int i){return individuals[i];}
-  void get_id_list(int ids[N]);
-  void next_generation();
-};
-
-Population::Population(){
-  for(int id=1; 10 >= id;id++){
-    individuals[id].set_id(id);
-  }
-}
-
-void Population::get_id_list(int ids[N]){
+Population::Population(Parameters& param){
   for(int i=0; N > i; i++){
-    ids[i] = individuals[i].get_id();
+    Individual ind;
+    ind.set_param(param);
+    individuals.push_back(ind);
+  }
+  std::random_device rnd;
+  std::mt19937 mt_(rnd());
+  mt = mt_;
+}
+
+void Population::add_new_mutations(Parameters& param){
+  for(int i=0; N > i; i++){
+    individuals[i].add_mutations(param=param, mt=mt);
   }
 }
 
-void Population::next_generation(){
-  Individual next_inds[N];
-  std::random_device rnd;
-  std::mt19937 mt(rnd());
+Individual Population::reproduct(Parameters& param,int i1, int i2){
+  int mutater=0;
+  std::vector<int> tsg_non;
+  std::bernoulli_distribution bern(0.5);
+  // individuals[i1] 's gamate
+  int muta = individuals[i1].get_mutater();
+  if(muta == 2){
+    mutater++;
+  }else if(muta == 1){
+    if(bern(mt)){mutater++;}
+  }
+  for(int &het_mu:individuals[i1].get_tsg_non_het()){
+    if(bern(mt)){tsg_non.push_back(het_mu);}
+  }
+  for(int &hom_mu:individuals[i1].get_tsg_non_hom()){
+    tsg_non.push_back(hom_mu);
+  }
+  // individuals[i2] 's gamate
+  muta = individuals[i2].get_mutater();
+  if(muta == 2){
+    mutater++;
+  }else if(muta == 1){
+    if(bern(mt)){mutater++;}
+  }
+  for(int &het_mu:individuals[i2].get_tsg_non_het()){
+    if(bern(mt)){tsg_non.push_back(het_mu);}
+  }
+  for(int &hom_mu:individuals[i2].get_tsg_non_hom()){
+    tsg_non.push_back(hom_mu);
+  }
+  Individual ind(mutater, tsg_non); //明示的代入がダメ？
+  ind.set_param(param);
+  return(ind);
+}
+
+void Population::next_generation(Parameters& param){
+  std::vector<Individual> next_inds;
   std::uniform_int_distribution<> dist(0, N -1);
   for(int i=0; N > i; i++){
-     next_inds[i] = individuals[dist(mt)];
+     next_inds.push_back(reproduct(param=param, dist(mt), dist(mt))); //ここも明示的にできない
   }
-  for(int i=0; N > i; i++){
-    individuals[i] = next_inds[i];
-  }
+  individuals = next_inds;
 }
 
-
-int main()
-{
-  Population population;
-  population.next_generation();
-  int id[N];
-  population.get_id_list(id);
-  for(int i=0; N > i; i++){
-    cout <<id[i] <<" ";
+std::vector<int> Population::tsg_non_mutation_count(){
+  std::vector<int> tsg_non_mutation(tsg_non_site);
+  for(Individual &ind:individuals){
+    for(int &het_mu:ind.get_tsg_non_het()){
+      tsg_non_mutation[het_mu]++;
+    }
+    for(int &hom_mu:ind.get_tsg_non_hom()){
+      tsg_non_mutation[hom_mu]+=2;
+    }
   }
-  cout <<endl;
-
-  return 1;
+  return(tsg_non_mutation);
 }
