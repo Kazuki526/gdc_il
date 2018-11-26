@@ -1,0 +1,50 @@
+{
+    "filters":{
+        "op":"and",
+        "content":[
+            {
+                "op":"in",
+                "content":{
+                    "field":"cases.samples.sample_type",
+                    "value":[
+                       "Blood Derived Normal",
+					   "Solid Tissue Normal",
+					   "Primary Tumor"
+                    ]
+                }
+            },
+            {
+                "op":"in",
+                "content":{
+                    "field":"cases.project.program.name",
+                    "value":"TCGA"
+                }
+            },
+            {
+                "op":"in",
+                "content":{
+                    "field":"cases.project.project_id",
+                    "value":"PROJECT"
+                }
+            },
+			{
+                "op":"in",
+                "content":{
+                    "field":"files.experimental_strategy",
+                    "value":"WXS"
+                }
+            },
+			{
+                "op":"in",
+                "content":{
+                    "field":"files.data_format",
+                    "value":"BAM"
+                }
+            }
+        ]
+    },
+    "format":"tsv",
+    "fields":"file_name,cases.submitter_id,cases.samples.sample_type",
+    "size":"3000"
+}
+
