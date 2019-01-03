@@ -98,6 +98,8 @@ with gzip.open(infile, mode="rt") as genoty:
     ln = 0
     for l in genoty:
         ln += 1
+        if(ln % 1000 == 0):
+            print(ln+"line doing\n")
         line = l.rstrip().split("\t")
         vnum_class_an = np.array([0]*4)  # 10%(>8), 5%(>10), 3%(>12), 1%(>14)
         vnum_class_anw = np.array([0]*4)
