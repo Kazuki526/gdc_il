@@ -70,7 +70,7 @@ def fisher_by_row(ac_arr, vnum_an):
     p_5 = fisher_test(ac_arr[5], ac_arr[1], vnum_an[1], ac_arr[0])
     p_3 = fisher_test(ac_arr[6], ac_arr[1], vnum_an[2], ac_arr[0])
     p_1 = fisher_test(ac_arr[7], ac_arr[1], vnum_an[3], ac_arr[0])
-    return(np.array([p_10, p_5, p_3, p_1]))
+    return([p_10, p_5, p_3, p_1])
 
 
 infile = "/Volumes/areca42TB/tcga/array_genotype/"
@@ -98,8 +98,8 @@ with gzip.open(infile, mode="rt") as genoty:
     ln = 0
     for l in genoty:
         ln += 1
-        if(ln % 1000 == 0):
-            print(ln+"line doing\n")
+        if(ln % 10000 == 0):
+            print(str(ln)+"line doing")
         line = l.rstrip().split("\t")
         vnum_class_an = np.array([0]*4)  # 10%(>8), 5%(>10), 3%(>12), 1%(>14)
         vnum_class_anw = np.array([0]*4)
@@ -114,9 +114,9 @@ with gzip.open(infile, mode="rt") as genoty:
             ac_all += allele_count(int(ge), vnum)
             ac_w += allele_count(int(ge), vnum, race)
         p_value_all = fisher_by_row(ac_all, vnum_class_an)
-        print(*ac_all.tolist(), *p_value_all.tolist(), sep='\t', file=out)
+        print(position, *ac_all.tolist(), *p_value_all, sep='\t', file=out)
         p_value_w = fisher_by_row(ac_w, vnum_class_anw)
-        print(*ac_w.tolist(), *p_value_w.tolist(), sep='\t', file=outw)
+        print(position, *ac_w.tolist(), *p_value_w, sep='\t', file=outw)
 
 out.close()
 outw.close()
